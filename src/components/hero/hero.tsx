@@ -52,10 +52,6 @@ export function Hero({ video, children }: { video: HeroVideo; children: ReactNod
         className="intro-fade absolute right-[max(20px,calc((100vw-1440px)/2+64px))] bottom-14 hidden flex-col items-center gap-3 text-[11px] tracking-[0.3em] text-mute-2 uppercase [writing-mode:vertical-rl] md:flex lg:bottom-24"
         style={{ "--d": "1300ms" } as React.CSSProperties}
       >
-        Scroll
-        <span className="relative h-16 w-px overflow-hidden bg-line-strong">
-          <span className="absolute inset-x-0 top-0 h-1/2 animate-[scrollhint_2.2s_var(--ease-soft)_infinite] bg-paper" />
-        </span>
       </div>
     </section>
   );

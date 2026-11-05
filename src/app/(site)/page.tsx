@@ -67,7 +67,7 @@ export default async function HomePage() {
           </span>
           <span className="intro-line">
             <span className="text-chrome" style={{ "--d": "120ms" } as React.CSSProperties}>
-              in het detail.
+              in het detail
             </span>
           </span>
         </h1>
