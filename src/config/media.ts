@@ -43,6 +43,9 @@ export type PhotoSequence = {
   focus?: { x: number; y: number };
 };
 
+/** View-transition-naam van een dienstbeeld; homepage-kaart en /offerte-kop delen deze. */
+export const serviceImageTransition = (slug: ServiceSlug) => `dienst-beeld-${slug}`;
+
 const HERO_ALT = "Grafietgrijze coupé in zijaanzicht voor een donkere betonwand";
 
 export const media: {

@@ -11,8 +11,12 @@ export const site = {
   /** Woordmerk (licht, transparante achtergrond), bijgesneden tot de letters. */
   logo: { src: "/media/brand/kavro.png", width: 800, height: 134 },
 
-  /** Publieke URL zonder slash aan het eind. Zet in productie NEXT_PUBLIC_SITE_URL. */
-  url: (process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000").replace(/\/$/, ""),
+  /**
+   * Publieke URL zonder slash aan het eind. Basis voor metadataBase (og:image,
+   * twitter:image, canonical), sitemap en robots. Zet NEXT_PUBLIC_SITE_URL bij je
+   * hostingpartij; zonder die variabele valt hij terug op het live Vercel-domein.
+   */
+  url: (process.env.NEXT_PUBLIC_SITE_URL || "https://kavrov.vercel.app").replace(/\/$/, ""),
 
   contact: {
     email: "", // bijv. "info@kavro.nl"

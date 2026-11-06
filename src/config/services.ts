@@ -47,10 +47,21 @@ export function isFinishSlug(value: unknown): value is FinishSlug {
   return typeof value === "string" && (FINISH_SLUGS as readonly string[]).includes(value);
 }
 
-export function quoteHref(opts: { service?: ServiceSlug; finish?: FinishSlug } = {}) {
+/** Tintopties voor window tinting: lichtdoorlatendheid in procenten (hoger = lichter). */
+export const TINTS = [50, 35, 20, 5] as const;
+export type Tint = (typeof TINTS)[number];
+export const DEFAULT_TINT: Tint = 20;
+
+export function parseTint(value: unknown): Tint | null {
+  const n = typeof value === "string" ? Number(value) : NaN;
+  return (TINTS as readonly number[]).includes(n) ? (n as Tint) : null;
+}
+
+export function quoteHref(opts: { service?: ServiceSlug; finish?: FinishSlug; tint?: Tint } = {}) {
   const params = new URLSearchParams();
   if (opts.service) params.set("dienst", opts.service);
   if (opts.finish) params.set("afwerking", opts.finish);
+  if (opts.tint) params.set("tint", String(opts.tint));
   const qs = params.toString();
   return qs ? `/offerte?${qs}` : "/offerte";
 }

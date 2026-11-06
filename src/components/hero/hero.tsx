@@ -1,6 +1,7 @@
 import Image from "next/image";
 import type { ReactNode } from "react";
 import type { HeroVideo } from "@/config/media";
+import { IntroOnce } from "./intro-once";
 
 /**
  * Schermvullende hero met achtergrondvideo. Zonder video (of bij "minder
@@ -44,6 +45,7 @@ export function Hero({ video, children }: { video: HeroVideo; children: ReactNod
       </div>
 
       <div className="wrap relative z-10 flex flex-1 flex-col justify-end pt-[calc(var(--header-h)+48px)] pb-14 md:pb-20 lg:pb-24">
+        <IntroOnce />
         {children}
       </div>
 
