@@ -1,12 +1,18 @@
+import { ViewTransition } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { Arrow } from "@/components/arrow";
 import { Hero } from "@/components/hero/hero";
 import { TrimArtwork } from "@/components/art/trim-artwork";
 import { PpfArtwork, TintArtwork } from "@/components/art/service-art";
+import { PpfSheen } from "@/components/art/ppf-sheen";
+import { Faq } from "@/components/faq";
+import { Marquee } from "@/components/marquee";
 import { PortfolioGrid } from "@/components/portfolio";
+import { ProcessSteps } from "@/components/process-steps";
+import { TintNote, TintOverlay, TintPicker, TintProvider, TintQuoteLink } from "@/components/tint/tint";
 import { Transformation } from "@/components/transformation";
-import { media, type PhotoAsset } from "@/config/media";
+import { media, serviceImageTransition, type PhotoAsset } from "@/config/media";
 import { quoteHref, services, type ServiceSlug } from "@/config/services";
 import { hasAddress, site, telHref } from "@/config/site";
 import { getPublishedProjectsSafe } from "@/lib/storage";
@@ -66,17 +72,17 @@ export default async function HomePage() {
             <span className="text-chrome">Strak tot</span>
           </span>
           <span className="intro-line">
-            <span className="text-chrome" style={{ "--d": "120ms" } as React.CSSProperties}>
+            <span className="text-chrome" style={{ "--d": "110ms" } as React.CSSProperties}>
               in het detail
             </span>
           </span>
         </h1>
         <div className="mt-8 lg:mt-10">
           <div>
-            <p className="intro-fade max-w-[44ch] text-[18px] leading-relaxed text-mute lg:text-[20px]" style={{ "--d": "450ms" } as React.CSSProperties}>
+            <p className="intro-fade max-w-[44ch] text-[18px] leading-relaxed text-mute lg:text-[20px]" style={{ "--d": "560ms" } as React.CSSProperties}>
               PPF, chrome delete en window tinting. Met aandacht voor elke rand en elke lijn van je auto.
             </p>
-            <div className="intro-fade mt-8 flex flex-wrap items-center gap-3" style={{ "--d": "600ms" } as React.CSSProperties}>
+            <div className="intro-fade mt-8 flex flex-wrap items-center gap-3" style={{ "--d": "640ms" } as React.CSSProperties}>
               <Link href="/offerte" className="btn-primary">
                 Vraag een offerte aan
                 <Arrow />
@@ -90,22 +96,7 @@ export default async function HomePage() {
       </Hero>
 
       {/* LOPENDE BAND */}
-      <div aria-hidden="true" className="relative overflow-hidden border-y border-line bg-graphite py-5">
-        <div className="flex w-max animate-marquee motion-reduce:animate-none">
-          {[0, 1].map((n) => (
-            <div key={n} className="flex shrink-0 items-center">
-              {MARQUEE.map((w) => (
-                <span key={w} className="flex items-center">
-                  <span className="display px-8 text-[28px] text-paper/85 md:text-[34px]">{w}</span>
-                  <span className="h-2 w-2 rotate-45 bg-accent" />
-                </span>
-              ))}
-            </div>
-          ))}
-        </div>
-        <div className="pointer-events-none absolute inset-y-0 left-0 w-24 bg-gradient-to-r from-graphite to-transparent" />
-        <div className="pointer-events-none absolute inset-y-0 right-0 w-24 bg-gradient-to-l from-graphite to-transparent" />
-      </div>
+      <Marquee words={MARQUEE} />
 
       {/* DIENSTEN */}
       <section id="diensten" aria-labelledby="diensten-titel" className="relative py-24 md:py-32 lg:py-40">
@@ -117,7 +108,7 @@ export default async function HomePage() {
           />
 
           <div className="mt-12 grid gap-4 md:mt-16 md:grid-cols-3 lg:gap-5">
-            <ServiceCard slug="ppf" index={0}>
+            <ServiceCard slug="ppf" index={0} overlay={<PpfSheen />}>
               <PpfArtwork className="absolute inset-0 h-full w-full" />
             </ServiceCard>
             <ServiceCard slug="chrome-delete" index={1}>
@@ -130,9 +121,18 @@ export default async function HomePage() {
                 title="Illustratie: raamomlijsting, links chroom en rechts satijnzwart"
               />
             </ServiceCard>
-            <ServiceCard slug="window-tinting" index={2}>
-              <TintArtwork className="absolute inset-0 h-full w-full" />
-            </ServiceCard>
+            <TintProvider>
+              <ServiceCard
+                slug="window-tinting"
+                index={2}
+                overlay={<TintOverlay />}
+                controls={<TintPicker />}
+                extra={<TintNote />}
+                QuoteLink={TintQuoteLink}
+              >
+                <TintArtwork className="absolute inset-0 h-full w-full" />
+              </ServiceCard>
+            </TintProvider>
           </div>
         </div>
       </section>
@@ -160,22 +160,11 @@ export default async function HomePage() {
             title="Hoe het werkt"
             text="Je aanvraag is zo gedaan. Daarna stemmen we alles samen met je af."
           />
-          <div aria-hidden="true" className="mt-14 hidden h-px bg-line md:mt-20 lg:block">
-            <div className="draw h-px bg-gradient-to-r from-accent via-accent/60 to-transparent" />
+          <div className="mt-14 md:mt-20 lg:grid lg:grid-cols-12 lg:gap-10">
+            <div className="lg:col-span-7 lg:col-start-6">
+              <ProcessSteps steps={STEPS} />
+            </div>
           </div>
-          <ol className="mt-14 grid gap-4 sm:grid-cols-2 md:mt-20 lg:mt-8 lg:grid-cols-4 lg:gap-5">
-            {STEPS.map((s, i) => (
-              <li
-                key={s.title}
-                style={{ "--i": i } as React.CSSProperties}
-                className="card reveal flex flex-col p-7 md:p-8"
-              >
-                <span className="text-[14px] text-mute-2 tabular-nums">Stap {i + 1}</span>
-                <h3 className="display mt-3 text-[30px]">{s.title}</h3>
-                <p className="mt-3 text-[15px] text-mute">{s.text}</p>
-              </li>
-            ))}
-          </ol>
         </div>
       </section>
 
@@ -220,21 +209,8 @@ export default async function HomePage() {
             </h2>
             <p className="mt-6 max-w-[36ch] text-mute">Staat je vraag er niet tussen? Zet hem bij je offerteaanvraag, dan beantwoorden we hem.</p>
           </div>
-          <div className="divide-y divide-line border-y border-line lg:col-span-7 lg:col-start-6">
-            {FAQ.map((f) => (
-              <details key={f.q} className="faq group">
-                <summary className="flex cursor-pointer list-none items-center justify-between gap-6 py-6 text-[18px] font-medium transition-colors hover:text-accent md:text-[20px]">
-                  {f.q}
-                  <span
-                    aria-hidden="true"
-                    className="faq-icon flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-line-strong text-[20px] leading-none text-paper transition-all duration-300"
-                  >
-                    +
-                  </span>
-                </summary>
-                <p className="max-w-[62ch] pb-7 text-mute">{f.a}</p>
-              </details>
-            ))}
+          <div className="lg:col-span-7 lg:col-start-6">
+            <Faq items={FAQ} />
           </div>
         </div>
       </section>
@@ -290,8 +266,28 @@ function SectionHead({ id, title, text }: { id: string; title: React.ReactNode; 
   );
 }
 
-/** Compacte dienstkaart: beeld, naam, korte uitleg, kernpunten en een link naar de offerte. */
-function ServiceCard({ slug, index = 0, children }: { slug: ServiceSlug; index?: number; children: React.ReactNode }) {
+/**
+ * Compacte dienstkaart: beeld, naam, korte uitleg, kernpunten en een link naar de offerte.
+ * Optioneel: `overlay` over de foto (schaalt mee), `controls` op de foto (vast), `extra`
+ * onder de kernpunten en een eigen offerte-link.
+ */
+function ServiceCard({
+  slug,
+  index = 0,
+  overlay,
+  controls,
+  extra,
+  QuoteLink,
+  children,
+}: {
+  slug: ServiceSlug;
+  index?: number;
+  overlay?: React.ReactNode;
+  controls?: React.ReactNode;
+  extra?: React.ReactNode;
+  QuoteLink?: React.ComponentType<{ children: React.ReactNode }>;
+  children: React.ReactNode;
+}) {
   const s = services[slug];
   return (
     <article
@@ -301,10 +297,14 @@ function ServiceCard({ slug, index = 0, children }: { slug: ServiceSlug; index?:
     >
       <div className="relative p-1.5">
         <div className="relative overflow-hidden rounded-[18px]">
-          <ServiceFrame slug={slug} className="aspect-[4/3]">
-            {children}
-          </ServiceFrame>
+          {/* Zelfde naam als de kopfoto op /offerte: bij "Offerte voor …" loopt het beeld door. */}
+          <ViewTransition name={serviceImageTransition(slug)} share="morph" default="none">
+            <ServiceFrame slug={slug} overlay={overlay} className="aspect-[4/3] rounded-[18px]">
+              {children}
+            </ServiceFrame>
+          </ViewTransition>
           {!media.services[slug] && <span className="chip absolute top-3 left-3">Illustratie</span>}
+          {controls}
         </div>
       </div>
       <div className="flex flex-1 flex-col px-6 pt-5 pb-6">
@@ -320,16 +320,31 @@ function ServiceCard({ slug, index = 0, children }: { slug: ServiceSlug; index?:
             </li>
           ))}
         </ul>
-        <Link href={quoteHref({ service: slug })} className="link-line mt-auto self-start pt-4 text-[15px]">
-          Offerte voor {s.short}
-          <Arrow />
-        </Link>
+        {extra}
+        {QuoteLink ? (
+          <QuoteLink>Offerte voor {s.short}</QuoteLink>
+        ) : (
+          <Link href={quoteHref({ service: slug })} className="link-line mt-auto self-start pt-4 text-[15px]">
+            Offerte voor {s.short}
+            <Arrow />
+          </Link>
+        )}
       </div>
     </article>
   );
 }
 
-function ServiceFrame({ slug, className, children }: { slug: ServiceSlug; className: string; children: React.ReactNode }) {
+function ServiceFrame({
+  slug,
+  className,
+  overlay,
+  children,
+}: {
+  slug: ServiceSlug;
+  className: string;
+  overlay?: React.ReactNode;
+  children: React.ReactNode;
+}) {
   const photo: PhotoAsset | null = media.services[slug];
   return (
     <div className={`relative w-full overflow-hidden bg-graphite ${className}`}>
@@ -339,14 +354,12 @@ function ServiceFrame({ slug, className, children }: { slug: ServiceSlug; classN
             className="absolute inset-0"
             style={photo.crop ? { transform: `scale(${photo.crop.scale})`, transformOrigin: `${photo.crop.x * 100}% ${photo.crop.y * 100}%` } : undefined}
           >
-            {/* Ingezoomd beeld heeft meer pixels nodig om scherp te blijven. */}
-            <Image
-              src={photo.src}
-              alt={photo.alt}
-              fill
-              sizes={photo.crop ? "100vw" : "(min-width: 768px) 33vw, 100vw"}
-              className="object-cover transition-transform duration-700 ease-[var(--ease-soft)] group-hover:scale-[1.05]"
-            />
+            {/* Hover-zoom op een wrapper, zodat een overlay (tintmasker) exact meeschaalt met de foto. */}
+            <div className="absolute inset-0 transition-transform duration-700 ease-[var(--ease-soft)] group-hover:scale-[1.05]">
+              {/* Ingezoomd beeld heeft meer pixels nodig om scherp te blijven. */}
+              <Image src={photo.src} alt={photo.alt} fill sizes={photo.crop ? "100vw" : "(min-width: 768px) 33vw, 100vw"} className="object-cover" />
+              {overlay}
+            </div>
           </div>
         </div>
       ) : (

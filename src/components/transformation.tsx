@@ -1,17 +1,29 @@
 "use client";
 
 import Image from "next/image";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, useSyncExternalStore, type ReactNode, type RefObject } from "react";
+import {
+  easeInOut,
+  motion,
+  useMotionTemplate,
+  useMotionValue,
+  useMotionValueEvent,
+  useReducedMotion,
+  useScroll,
+  useTransform,
+  type MotionValue,
+} from "motion/react";
 import type { PhotoSequence } from "@/config/media";
 
 /**
- * Scroll-gestuurde "transformatie": de sectie plakt vast terwijl je scrolt.
- * Links de stappen met een verticale voortgangslijn, rechts de foto in een kaart
- * met een loep op de raamlijst. De foto's vloeien in elkaar over (chroom → deels →
- * satijnzwart) terwijl de kaart rustig inzoomt.
+ * "Van chroom naar satijnzwart": scroll-gestuurde onthulling.
  *
- * Alles hangt aan één waarde p (0..1). We lezen alleen de scrollpositie en zetten
- * transformaties, dus native scroll blijft intact. Bij "minder beweging": statisch eindbeeld.
+ * Desktop: de sectie is ~280svh hoog en de inhoud plakt vast. Scrollprogressie p (0..1)
+ * stuurt een horizontale clip-path-wipe: chroom → half → satijn. De wipe loopt van rechts
+ * naar links, net als het echte werk (de achterste lijst wordt eerst bekleed). Langs de
+ * wiperand loopt een dunne lichtlijn, als de rakel die de folie aandrukt.
+ * Mobiel (< lg): het beeld plakt bovenaan, de stappen scrollen eronder langs.
+ * Bij "minder beweging": geen scrollkoppeling, je kiest zelf de stap.
  */
 
 const STEPS = [
@@ -21,195 +33,247 @@ const STEPS = [
 ];
 const BADGES = ["Origineel chroom", "In bewerking", "Satijnzwart"];
 
-const ZOOM = 1.12;
-/** Loep: waar hij op inzoomt (fractie van de foto) en hoe breed de foto erin is. */
-const LOUPE = { x: 0.65, y: 0.745, width: 1300 };
+/** Waar in p (0..1) elke wipe loopt. Het midden valt op de stapgrens (1/3 en 2/3). */
+const WIPES: [number, number][] = [
+  [0.2, 0.46],
+  [0.54, 0.8],
+];
+const ZOOM = 1.08;
+const IMG_CLASS = "object-cover object-[55%_85%]";
+const IMG_SIZES = "(min-width: 1024px) 60vw, 100vw";
 
-const clamp = (v: number, a = 0, b = 1) => Math.min(b, Math.max(a, v));
-const smooth = (t: number) => t * t * (3 - 2 * t);
+const mid = ([a, b]: [number, number]) => (a + b) / 2;
+const subscribeNoop = () => () => {};
 
 export function Transformation({ sequence }: { sequence: PhotoSequence }) {
+  // Eerste render (server + hydratie) is altijd de scrollvariant; daarna pas de voorkeur lezen.
+  const hydrated = useSyncExternalStore(subscribeNoop, () => true, () => false);
+  const reduce = useReducedMotion();
+  return hydrated && reduce ? <StepSwitcher sequence={sequence} /> : <ScrollReveal sequence={sequence} />;
+}
+
+/* ------------------------------------------------------------------ */
+/* Scrollvariant                                                       */
+/* ------------------------------------------------------------------ */
+
+function ScrollReveal({ sequence }: { sequence: PhotoSequence }) {
   const sectionRef = useRef<HTMLElement>(null);
-  const cardRef = useRef<HTMLDivElement>(null);
-  const camRef = useRef<HTMLDivElement>(null);
-  const barRef = useRef<HTMLSpanElement>(null);
+  const listRef = useRef<HTMLOListElement>(null);
   const [step, setStep] = useState(0);
-  const steps = sequence.frames.length - 1;
 
+  // Desktop: progressie door de hele (vastplakkende) sectie.
+  const { scrollYProgress: sectionP } = useScroll({ target: sectionRef, offset: ["start start", "end end"] });
+  // Mobiel: progressie van de stappenlijst langs een lijn op 70% van het scherm, onder het beeld.
+  const { scrollYProgress: listP } = useScroll({ target: listRef, offset: ["start 70%", "end 70%"] });
+
+  const isLg = useMotionValue(0);
   useEffect(() => {
-    const section = sectionRef.current;
-    const card = cardRef.current;
-    const cam = camRef.current;
-    const bar = barRef.current;
-    if (!section || !card || !cam || !bar) return;
+    const mq = window.matchMedia("(min-width: 1024px)");
+    const sync = () => isLg.set(mq.matches ? 1 : 0);
+    sync();
+    mq.addEventListener("change", sync);
+    return () => mq.removeEventListener("change", sync);
+  }, [isLg]);
 
-    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const frames = Array.from(section.querySelectorAll<HTMLElement>("[data-frame]"));
-    let raf = 0;
-    let lastP = -1;
+  const p = useTransform(() => (isLg.get() ? sectionP.get() : listP.get()));
 
-    const progress = () => {
-      if (reduce.matches) return 1;
-      const rect = section.getBoundingClientRect();
-      const travel = rect.height - window.innerHeight;
-      return travel > 0 ? clamp(-rect.top / travel) : 0;
-    };
+  const wipe1 = useTransform(p, WIPES[0], [0, 1], { ease: easeInOut });
+  const wipe2 = useTransform(p, WIPES[1], [0, 1], { ease: easeInOut });
+  const zoom = useTransform(p, [0, 1], [1, ZOOM]);
 
-    const apply = (p: number) => {
-      // Kaart schuift in en kantelt licht recht terwijl de sectie binnenkomt.
-      const rect = section.getBoundingClientRect();
-      const enter = reduce.matches ? 1 : smooth(clamp(1 - rect.top / window.innerHeight));
-      card.style.transform = `translateY(${((1 - enter) * 60).toFixed(1)}px) scale(${(0.94 + enter * 0.06).toFixed(4)}) rotate(${((1 - enter) * -1.5).toFixed(2)}deg)`;
-      card.style.opacity = (0.3 + enter * 0.7).toFixed(3);
+  // Stap wisselt halverwege elke wipe (direct uit p, zodat hij nooit een frame achterloopt).
+  useMotionValueEvent(p, "change", (v) => {
+    setStep(v >= mid(WIPES[1]) ? 2 : v >= mid(WIPES[0]) ? 1 : 0);
+  });
 
-      const zoom = reduce.matches ? 1 : 1 + (ZOOM - 1) * smooth(clamp(p / 0.9));
-      cam.style.transform = `scale(${zoom.toFixed(4)})`;
-
-      const t = clamp((p - 0.12) / 0.66);
-      frames.forEach((el) => {
-        const i = Number(el.dataset.frame);
-        el.style.opacity = smooth(clamp(t * steps - (i - 1))).toFixed(3);
-      });
-      bar.style.transform = `scaleY(${t.toFixed(4)})`;
-      setStep(t < 0.25 ? 0 : t < 0.75 ? 1 : 2);
-    };
-
-    const tick = () => {
-      raf = 0;
-      const p = progress();
-      if (Math.abs(p - lastP) < 0.0005 && p > 0) return;
-      lastP = p;
-      apply(p);
-    };
-    const schedule = () => {
-      if (!raf) raf = requestAnimationFrame(tick);
-    };
-    const reset = () => {
-      lastP = -1;
-      schedule();
-    };
-
-    reset();
-    window.addEventListener("scroll", schedule, { passive: true });
-    window.addEventListener("resize", reset);
-    reduce.addEventListener("change", reset);
-    return () => {
-      cancelAnimationFrame(raf);
-      window.removeEventListener("scroll", schedule);
-      window.removeEventListener("resize", reset);
-      reduce.removeEventListener("change", reset);
-    };
-  }, [steps]);
-
-  const [first, ...rest] = sequence.frames;
-  const fx = sequence.focus?.x ?? 0.5;
-  const fy = sequence.focus?.y ?? 0.6;
-  const loupeH = (LOUPE.width * sequence.height) / sequence.width;
+  const [first, half, last] = sequence.frames;
 
   return (
     <section
       ref={sectionRef}
       id="afwerking"
       aria-labelledby="afwerking-titel"
-      className="relative h-[300svh] border-y border-line bg-graphite motion-reduce:h-auto"
+      className="relative border-y border-line bg-graphite lg:h-[280svh]"
     >
-      <div className="sticky top-0 flex h-svh items-center overflow-hidden motion-reduce:relative">
-        <div className="wrap grid w-full items-center gap-6 pt-[var(--header-h)] lg:grid-cols-12 lg:gap-12">
-          {/* Tekst en stappen */}
-          <div className="lg:col-span-4">
-            <h2 id="afwerking-titel" className="display text-[36px] md:text-[48px] lg:text-[56px]">
-              Van chroom naar <span className="text-chrome">satijnzwart</span>
-            </h2>
-            <p className="mt-4 hidden max-w-[38ch] text-[15px] text-mute md:block">
-              Zo ziet chrome delete eruit. Alleen de lijsten rond de ramen worden zwart, lak en glas blijven zoals ze zijn.
-            </p>
-
-            <div className="relative mt-6 pl-6 md:mt-10">
-              <span aria-hidden="true" className="absolute top-1 bottom-1 left-0 w-px bg-line-strong" />
-              <span
-                ref={barRef}
-                aria-hidden="true"
-                className="absolute top-1 bottom-1 left-0 w-px origin-top bg-accent shadow-[0_0_10px_var(--color-accent)]"
-                style={{ transform: "scaleY(0)" }}
-              />
-              <ol className="space-y-5 md:space-y-7">
-                {STEPS.map((s, i) => (
-                  <li
-                    key={s.title}
-                    aria-current={i === step ? "step" : undefined}
-                    className={`relative transition-opacity duration-500 ${i === step ? "opacity-100" : "opacity-40 max-md:hidden"}`}
-                  >
-                    <span
-                      aria-hidden="true"
-                      className={`absolute top-[7px] -left-[28px] h-[9px] w-[9px] rounded-full border transition-colors duration-500 ${
-                        i <= step ? "border-accent bg-accent" : "border-line-strong bg-graphite"
-                      }`}
-                    />
-                    <p className="font-display text-[13px] font-semibold tracking-[0.16em] text-mute-2 tabular-nums">Stap {i + 1}</p>
-                    <h3 className="mt-1 text-[19px] font-semibold md:text-[21px]">{s.title}</h3>
-                    <p className="mt-1 max-w-[36ch] text-[14px] text-mute md:text-[15px]">{s.text}</p>
-                  </li>
-                ))}
-              </ol>
-            </div>
-          </div>
-
-          {/* Beeld in een kaart, met loep op de raamlijst */}
-          <div className="relative lg:col-span-8">
-            <div
-              ref={cardRef}
-              className="relative aspect-[4/3] overflow-hidden rounded-[24px] border border-line-strong bg-ink shadow-[0_40px_80px_-30px_rgb(0_0_0/0.8)] will-change-transform sm:aspect-[16/10] md:rounded-[32px]"
-            >
-              <div ref={camRef} className="absolute inset-0 will-change-transform" style={{ transformOrigin: `${fx * 100}% ${fy * 100}%` }}>
-                <Image
-                  src={first.src}
-                  alt={sequence.frames[step]?.alt ?? first.alt}
-                  fill
-                  sizes="(min-width: 1024px) 60vw, 100vw"
-                  className="object-cover object-[55%_85%]"
-                />
-                {rest.map((f, i) => (
-                  <div key={f.src} data-frame={i + 1} className="absolute inset-0" style={{ opacity: 0 }} aria-hidden="true">
-                    <Image src={f.src} alt="" fill sizes="(min-width: 1024px) 60vw, 100vw" className="object-cover object-[55%_85%]" />
-                  </div>
-                ))}
-              </div>
-              <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-gradient-to-t from-ink/50 via-transparent to-transparent" />
-
-              <span className="chip absolute top-4 left-4 !text-paper md:top-5 md:left-5" aria-live="polite">
-                <span
-                  className={`h-2 w-2 rounded-full transition-colors duration-500 ${
-                    step === 0 ? "bg-gradient-to-br from-white to-[#8d9296]" : step === 1 ? "bg-mute-2" : "bg-[#151617] ring-1 ring-line-strong"
-                  }`}
-                />
-                {BADGES[step]}
-              </span>
-              <span className="chip absolute top-4 right-4 tabular-nums md:top-5 md:right-5">
-                {step + 1} / {STEPS.length}
-              </span>
-            </div>
-
-            {/* Loep: zelfde reeks, ingezoomd op de achterste raamlijst */}
-            <div
-              aria-hidden="true"
-              className="absolute -bottom-6 -left-4 hidden h-[170px] w-[170px] overflow-hidden rounded-full border border-line-strong bg-ink shadow-[0_20px_50px_-10px_rgb(0_0_0/0.9)] ring-4 ring-graphite md:block lg:-left-10 lg:h-[200px] lg:w-[200px]"
-            >
-              <div className="absolute" style={{ width: LOUPE.width, height: loupeH, left: `calc(50% - ${LOUPE.x * LOUPE.width}px)`, top: `calc(50% - ${LOUPE.y * loupeH}px)` }}>
-                <Image src={first.src} alt="" fill sizes={`${LOUPE.width}px`} className="object-cover" />
-                {rest.map((f, i) => (
-                  <div key={f.src} data-frame={i + 1} className="absolute inset-0" style={{ opacity: 0 }}>
-                    <Image src={f.src} alt="" fill sizes={`${LOUPE.width}px`} className="object-cover" />
-                  </div>
-                ))}
-              </div>
-              <span className="absolute inset-0 rounded-full bg-[radial-gradient(circle_at_30%_25%,rgb(255_255_255/0.18),transparent_45%)]" />
-              <span className="absolute bottom-3 left-1/2 -translate-x-1/2 rounded-full bg-ink/80 px-2.5 py-0.5 text-[11px] tracking-[0.14em] text-mute uppercase">
-                Detail
-              </span>
-            </div>
-          </div>
-        </div>
+      <div className="lg:sticky lg:top-0 lg:flex lg:h-svh lg:items-center lg:overflow-hidden">
+        <Layout
+          stickyCard
+          card={
+            <Card step={step}>
+              <motion.div className="absolute inset-0" style={{ scale: zoom, transformOrigin: focusOrigin(sequence) }}>
+                <Image src={first.src} alt={sequence.frames[step]?.alt ?? first.alt} fill sizes={IMG_SIZES} className={IMG_CLASS} />
+                {half && <WipeLayer src={half.src} progress={wipe1} />}
+                {last && <WipeLayer src={last.src} progress={wipe2} />}
+              </motion.div>
+            </Card>
+          }
+          steps={
+            <StepList listRef={listRef} step={step} bar={p} itemClassName="max-lg:min-h-[40svh]" />
+          }
+        />
       </div>
     </section>
   );
+}
+
+/** Eén beeldlaag die van rechts naar links wordt onthuld, met een rakellijn op de rand. */
+function WipeLayer({ src, progress }: { src: string; progress: MotionValue<number> }) {
+  const left = useTransform(progress, [0, 1], [100, 0]);
+  const clipPath = useMotionTemplate`inset(0 0 0 ${left}%)`;
+  const x = useMotionTemplate`${left}%`;
+  const edge = useTransform(progress, [0, 0.04, 0.96, 1], [0, 1, 1, 0]);
+
+  return (
+    <>
+      <motion.div aria-hidden="true" className="absolute inset-0 will-change-[clip-path]" style={{ clipPath }}>
+        <Image src={src} alt="" fill sizes={IMG_SIZES} className={IMG_CLASS} />
+      </motion.div>
+      <motion.div aria-hidden="true" className="pointer-events-none absolute inset-0" style={{ x, opacity: edge }}>
+        <span className="absolute inset-y-0 left-0 w-px -translate-x-1/2 bg-white/70 shadow-[0_0_14px_2px_rgb(255_255_255/0.35)]" />
+      </motion.div>
+    </>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Variant zonder scrollkoppeling ("minder beweging")                  */
+/* ------------------------------------------------------------------ */
+
+function StepSwitcher({ sequence }: { sequence: PhotoSequence }) {
+  const [step, setStep] = useState(0);
+  return (
+    <section id="afwerking" aria-labelledby="afwerking-titel" className="relative border-y border-line bg-graphite py-24 md:py-32">
+      <Layout
+        card={
+          <Card step={step}>
+            {sequence.frames.map((f, i) => (
+              <div key={f.src} className={`absolute inset-0 ${i === step ? "" : "invisible"}`} aria-hidden={i === step ? undefined : true}>
+                <Image src={f.src} alt={f.alt} fill sizes={IMG_SIZES} className={IMG_CLASS} />
+              </div>
+            ))}
+          </Card>
+        }
+        steps={<StepList step={step} onSelect={setStep} />}
+      />
+    </section>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Gedeelde opbouw                                                     */
+/* ------------------------------------------------------------------ */
+
+/** Desktop: kop + stappen links, beeld rechts. Mobiel: kop, beeld, stappen. */
+function Layout({ card, steps, stickyCard = false }: { card: ReactNode; steps: ReactNode; stickyCard?: boolean }) {
+  return (
+    <div className="wrap grid w-full gap-8 pt-20 pb-16 lg:grid-cols-12 lg:grid-rows-[auto_auto] lg:items-center lg:gap-x-12 lg:gap-y-0 lg:py-0 lg:pt-[var(--header-h)]">
+      <div className="lg:col-span-4 lg:self-end">
+        <h2 id="afwerking-titel" className="display text-[36px] md:text-[48px] lg:text-[56px]">
+          Van chroom naar <span className="text-chrome">satijnzwart</span>
+        </h2>
+        <p className="mt-4 hidden max-w-[38ch] text-[15px] text-mute md:block">
+          Zo ziet chrome delete eruit. Alleen de lijsten rond de ramen worden zwart, lak en glas blijven zoals ze zijn.
+        </p>
+      </div>
+      <div
+        className={`self-start lg:col-span-8 lg:col-start-5 lg:row-span-2 lg:row-start-1 lg:self-center ${
+          // Mobiel: beeld plakt onder de header; de effen strook erachter dekt de stappenlijn af.
+          stickyCard
+            ? "max-lg:sticky max-lg:top-[var(--header-h)] max-lg:z-10 max-lg:-mx-5 max-lg:bg-graphite max-lg:px-5 max-lg:py-3 md:max-lg:-mx-10 md:max-lg:px-10"
+            : ""
+        }`}
+      >
+        {card}
+      </div>
+      <div className="lg:col-span-4 lg:self-start lg:pt-10">{steps}</div>
+    </div>
+  );
+}
+
+function Card({ step, className = "", children }: { step: number; className?: string; children: ReactNode }) {
+  return (
+    <div
+      className={`relative aspect-[4/3] overflow-hidden rounded-[24px] border border-line-strong bg-ink shadow-[0_40px_80px_-30px_rgb(0_0_0/0.8)] sm:aspect-[16/10] md:rounded-[32px] ${className}`}
+    >
+      {children}
+      <div aria-hidden="true" className="pointer-events-none absolute inset-0 bg-gradient-to-t from-ink/50 via-transparent to-transparent" />
+      <span className="chip absolute top-4 left-4 !text-paper md:top-5 md:left-5" aria-live="polite">
+        <span
+          className={`h-2 w-2 rounded-full transition-colors duration-500 motion-reduce:transition-none ${
+            step === 0 ? "bg-gradient-to-br from-white to-[#8d9296]" : step === 1 ? "bg-mute-2" : "bg-[#151617] ring-1 ring-line-strong"
+          }`}
+        />
+        {BADGES[step]}
+      </span>
+      <span className="chip absolute top-4 right-4 tabular-nums md:top-5 md:right-5">
+        {step + 1} / {STEPS.length}
+      </span>
+    </div>
+  );
+}
+
+function StepList({
+  step,
+  listRef,
+  bar,
+  onSelect,
+  itemClassName = "",
+}: {
+  step: number;
+  listRef?: RefObject<HTMLOListElement | null>;
+  bar?: MotionValue<number>;
+  onSelect?: (i: number) => void;
+  itemClassName?: string;
+}) {
+  return (
+    <div className="relative pl-6">
+      <span aria-hidden="true" className="absolute top-1 bottom-1 left-0 w-px bg-line-strong" />
+      {bar && (
+        <motion.span
+          aria-hidden="true"
+          className="absolute top-1 bottom-1 left-0 w-px origin-top bg-accent shadow-[0_0_10px_var(--color-accent)]"
+          style={{ scaleY: bar }}
+        />
+      )}
+      <ol ref={listRef} className="space-y-5 md:space-y-7">
+        {STEPS.map((s, i) => {
+          const active = i === step;
+          // In een knop mogen geen koppen; daar dezelfde opmaak met spans.
+          const [Label, Title, Text] = onSelect ? (["span", "span", "span"] as const) : (["p", "h3", "p"] as const);
+          const body = (
+            <>
+              <span
+                aria-hidden="true"
+                className={`absolute top-[7px] -left-[28px] h-[9px] w-[9px] rounded-full border transition-colors duration-500 motion-reduce:transition-none ${
+                  i <= step ? "border-accent bg-accent" : "border-line-strong bg-graphite"
+                }`}
+              />
+              <Label className="block font-display text-[13px] font-semibold tracking-[0.16em] text-mute-2 tabular-nums">Stap {i + 1}</Label>
+              <Title className="mt-1 block text-[19px] font-semibold md:text-[21px]">{s.title}</Title>
+              <Text className="mt-1 block max-w-[36ch] text-[14px] text-mute md:text-[15px]">{s.text}</Text>
+            </>
+          );
+          return (
+            <li
+              key={s.title}
+              aria-current={active ? "step" : undefined}
+              className={`relative transition-opacity duration-500 motion-reduce:transition-none ${active ? "opacity-100" : "opacity-40"} ${itemClassName}`}
+            >
+              {onSelect ? (
+                <button type="button" onClick={() => onSelect(i)} aria-pressed={active} className="relative block w-full text-left">
+                  {body}
+                </button>
+              ) : (
+                body
+              )}
+            </li>
+          );
+        })}
+      </ol>
+    </div>
+  );
+}
+
+function focusOrigin(sequence: PhotoSequence) {
+  return `${(sequence.focus?.x ?? 0.5) * 100}% ${(sequence.focus?.y ?? 0.6) * 100}%`;
 }
