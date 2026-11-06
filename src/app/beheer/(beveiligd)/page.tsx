@@ -1,105 +1,139 @@
 import Link from "next/link";
-import { finishes, services } from "@/config/services";
-import { telHref } from "@/config/site";
+import { services } from "@/config/services";
 import { requireAdmin } from "@/lib/auth";
-import { getStorage, REQUEST_STATUSES, statusLabels, type QuoteRequest, type RequestStatus } from "@/lib/storage";
-import { updateRequestStatus } from "../actions";
+import { getStorage, type Appointment, type QuoteRequest } from "@/lib/storage";
+import { kindDot, timeLabel } from "../_components/appointment-ui";
+import { addDays } from "../_lib/calendar";
+import { ago, daysBetween, fmtDateLong, fmtDateShort, fromYmd, ymd } from "../_lib/format";
 
 export const dynamic = "force-dynamic";
 
-const fmt = new Intl.DateTimeFormat("nl-NL", { dateStyle: "medium", timeStyle: "short", timeZone: "Europe/Amsterdam" });
-const fmtDate = new Intl.DateTimeFormat("nl-NL", { dateStyle: "long", timeZone: "Europe/Amsterdam" });
-
-export default async function RequestsPage({ searchParams }: PageProps<"/beheer">) {
+/** Overzicht: alleen wat nu aandacht vraagt en wat eraan komt. Details staan op de eigen pagina's. */
+export default async function DashboardPage() {
   await requireAdmin();
-  const sp = await searchParams;
-  const filter = (REQUEST_STATUSES as readonly string[]).includes(String(sp.status)) ? (sp.status as RequestStatus) : null;
 
+  const today = ymd();
   let requests: QuoteRequest[] = [];
+  let agenda: Appointment[] = [];
   let loadError: string | null = null;
   try {
-    requests = await (await getStorage()).listRequests();
+    const storage = await getStorage();
+    [requests, agenda] = await Promise.all([storage.listRequests(), storage.listAppointments({ from: today, to: addDays(today, 13) })]);
   } catch (err) {
     loadError = err instanceof Error ? err.message : "Onbekende fout";
   }
-  const shown = filter ? requests.filter((r) => r.status === filter) : requests;
-  const counts = Object.fromEntries(REQUEST_STATUSES.map((s) => [s, requests.filter((r) => r.status === s).length]));
+
+  const open = requests.filter((r) => r.status === "nieuw").sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  const counts = [
+    { label: "Nieuw", value: open.length, href: "/beheer/aanvragen?status=nieuw", accent: open.length > 0 },
+    { label: "In behandeling", value: requests.filter((r) => r.status === "in-behandeling").length, href: "/beheer/aanvragen?status=in-behandeling" },
+    { label: "Ingepland", value: requests.filter((r) => r.status === "ingepland").length, href: "/beheer/aanvragen?status=ingepland" },
+  ];
+
+  const hour = Number(new Intl.DateTimeFormat("nl-NL", { hour: "numeric", hourCycle: "h23", timeZone: "Europe/Amsterdam" }).format(new Date()));
+  const greeting = hour < 12 ? "Goedemorgen" : hour < 18 ? "Goedemiddag" : "Goedenavond";
 
   return (
-    <div>
-      <h1 className="text-[26px] font-medium">Aanvragen</h1>
-      <nav aria-label="Filter op status" className="mt-4 flex flex-wrap gap-x-4 gap-y-2 text-[14px]">
-        <Link href="/beheer" className={!filter ? "text-paper underline underline-offset-4" : "text-mute hover:text-paper"}>
-          Alle ({requests.length})
-        </Link>
-        {REQUEST_STATUSES.map((s) => (
-          <Link
-            key={s}
-            href={`/beheer?status=${s}`}
-            className={filter === s ? "text-paper underline underline-offset-4" : "text-mute hover:text-paper"}
-          >
-            {statusLabels[s]} ({counts[s]})
-          </Link>
-        ))}
-      </nav>
+    <div className="max-w-[960px]">
+      <header>
+        <p className="text-[14px] text-mute-2 first-letter:uppercase">{fmtDateLong.format(new Date())}</p>
+        <h1 className="display mt-1 text-[44px] md:text-[56px]">{greeting}</h1>
+      </header>
 
       {loadError && (
-        <p role="alert" className="mt-6 border border-danger/60 bg-danger/10 p-4">
-          Aanvragen konden niet worden geladen: {loadError}
+        <p role="alert" className="mt-8 rounded-2xl border border-danger/50 bg-danger/10 p-4">
+          Gegevens konden niet worden geladen: {loadError}
         </p>
       )}
-      {!loadError && shown.length === 0 && <p className="mt-8 text-mute">Geen aanvragen{filter ? " met deze status" : ""}.</p>}
 
-      <ul className="mt-6 divide-y divide-line border-y border-line">
-        {shown.map((r) => (
-          <li key={r.id} className="grid gap-4 py-5 md:grid-cols-12">
-            <div className="md:col-span-8">
-              <p className="text-[13px] text-mute-2">{fmt.format(new Date(r.createdAt))}</p>
-              <p className="mt-1 text-[17px] font-medium">
-                {r.name} · {r.vehicle}
-              </p>
-              <p className="mt-1 text-mute">
-                {r.services.map((s) => services[s]?.name ?? s).join(", ")}
-                {r.finish && <> · afwerking: {finishes[r.finish]?.name ?? r.finish}</>}
-              </p>
-              <p className="mt-2 flex flex-wrap gap-x-5">
-                {r.email && (
-                  <a className="underline underline-offset-4" href={`mailto:${r.email}`}>
-                    {r.email}
-                  </a>
-                )}
-                {r.phone && (
-                  <a className="underline underline-offset-4" href={telHref(r.phone)}>
-                    {r.phone}
-                  </a>
-                )}
-              </p>
-              {r.preferredDate && (
-                <p className="mt-2 text-[14px] text-mute">
-                  Voorkeursdatum (nog te bevestigen): {fmtDate.format(new Date(`${r.preferredDate}T12:00:00`))}
-                </p>
-              )}
-              {r.message && <p className="mt-2 max-w-[70ch] whitespace-pre-wrap text-mute">{r.message}</p>}
-            </div>
-            <form action={updateRequestStatus} className="flex items-start gap-2 md:col-span-4 md:justify-end">
-              <input type="hidden" name="id" value={r.id} />
-              <label htmlFor={`status-${r.id}`} className="sr-only">
-                Status
-              </label>
-              <select id={`status-${r.id}`} name="status" defaultValue={r.status} className="field !min-h-[42px] !w-auto !py-2">
-                {REQUEST_STATUSES.map((s) => (
-                  <option key={s} value={s}>
-                    {statusLabels[s]}
-                  </option>
-                ))}
-              </select>
-              <button type="submit" className="min-h-[42px] border border-line-strong px-3 hover:border-paper">
-                Opslaan
-              </button>
-            </form>
+      {/* Kerncijfers: één rustige rij */}
+      <ul className="mt-8 flex flex-wrap gap-x-10 gap-y-4 border-y border-line py-5">
+        {counts.map((c) => (
+          <li key={c.label}>
+            <Link href={c.href} className="group flex items-baseline gap-2.5">
+              <span className={`display text-[36px] tabular-nums ${c.accent ? "text-accent" : ""}`}>{c.value}</span>
+              <span className="text-[14.5px] text-mute group-hover:text-paper">{c.label}</span>
+            </Link>
           </li>
         ))}
       </ul>
+
+      <div className="mt-10 grid gap-12 md:grid-cols-2">
+        <Panel title="Te beantwoorden" href="/beheer/aanvragen?status=nieuw" linkLabel="Alle aanvragen">
+          {open.length === 0 ? (
+            <Empty>Alles is beantwoord.</Empty>
+          ) : (
+            <ul className="divide-y divide-line">
+              {open.slice(0, 6).map((r) => {
+                const waiting = daysBetween(ymd(new Date(r.createdAt)), today);
+                return (
+                  <li key={r.id}>
+                    <Link href={`/beheer/aanvragen/${r.id}`} className="group flex items-center justify-between gap-4 py-3.5">
+                      <span className="min-w-0">
+                        <span className="block truncate text-[15px] font-medium group-hover:underline group-hover:decoration-accent group-hover:underline-offset-4">
+                          {r.name}
+                        </span>
+                        <span className="block truncate text-[13.5px] text-mute">
+                          {r.vehicle} · {r.services.map((s) => services[s]?.short ?? s).join(" + ")}
+                        </span>
+                      </span>
+                      <span className={`shrink-0 text-[13px] ${waiting >= 2 ? "text-accent" : "text-mute-2"}`}>{ago(r.createdAt)}</span>
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+          {open.length > 6 && <p className="mt-3 text-[13.5px] text-mute-2">En nog {open.length - 6} meer.</p>}
+        </Panel>
+
+        <Panel title="Planning" href="/beheer/agenda" linkLabel="Agenda">
+          {agenda.length === 0 ? (
+            <Empty>Niets gepland de komende twee weken.</Empty>
+          ) : (
+            <ul className="divide-y divide-line">
+              {agenda.slice(0, 6).map((a) => {
+                const now = a.startDate <= today && a.endDate >= today;
+                return (
+                  <li key={a.id}>
+                    <Link href={`/beheer/agenda/${a.id}`} className="group flex items-center gap-3 py-3.5">
+                      <span aria-hidden="true" className={`h-2 w-2 shrink-0 rounded-full ${kindDot[a.kind]}`} />
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-[15px] font-medium group-hover:underline group-hover:decoration-accent group-hover:underline-offset-4">
+                          {a.title}
+                        </span>
+                        <span className="block text-[13.5px] text-mute">{timeLabel(a)}</span>
+                      </span>
+                      <span className={`shrink-0 text-[13px] ${now ? "font-medium text-accent" : "text-mute-2"}`}>
+                        {now ? "Vandaag" : fmtDateShort.format(fromYmd(a.startDate))}
+                      </span>
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </Panel>
+      </div>
     </div>
   );
+}
+
+function Panel({ title, href, linkLabel, children }: { title: string; href: string; linkLabel: string; children: React.ReactNode }) {
+  return (
+    // min-w-0: lange titels mogen de gridkolom niet breder dan het scherm maken.
+    <section aria-label={title} className="min-w-0">
+      <div className="flex items-baseline justify-between gap-4 border-b border-line pb-3">
+        <h2 className="text-[17px] font-semibold">{title}</h2>
+        <Link href={href} className="text-[13.5px] text-mute hover:text-paper">
+          {linkLabel} →
+        </Link>
+      </div>
+      {children}
+    </section>
+  );
+}
+
+function Empty({ children }: { children: React.ReactNode }) {
+  return <p className="py-6 text-[14.5px] text-mute">{children}</p>;
 }

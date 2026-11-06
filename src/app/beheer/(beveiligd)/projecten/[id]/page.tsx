@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { notFound } from "next/navigation";
 import { requireAdmin } from "@/lib/auth";
 import { getStorage } from "@/lib/storage";
@@ -15,19 +16,25 @@ export default async function EditProjectPage({ params }: PageProps<"/beheer/pro
 
   return (
     <div>
-      <h1 className="mb-6 text-[26px] font-medium">Project bewerken</h1>
+      <Link href="/beheer/projecten" className="inline-flex min-h-9 items-center text-[14px] text-mute hover:text-paper">
+        ← Projecten
+      </Link>
+      <h1 className="display mt-4 mb-8 text-[40px] md:text-[52px]">Project bewerken</h1>
       <ProjectForm project={project} />
-      <form action={deleteProject} className="mt-14 max-w-2xl border-t border-line pt-6">
-        <input type="hidden" name="id" value={project.id} />
-        <p className="font-medium">Project verwijderen</p>
-        <label className="mt-3 flex items-center gap-3 text-mute">
-          <input type="checkbox" name="confirm" required className="h-5 w-5" />
-          Ja, verwijder dit project definitief
-        </label>
-        <button type="submit" className="mt-4 min-h-[42px] border border-danger/70 px-4 text-danger hover:bg-danger/10">
-          Verwijderen
-        </button>
-      </form>
+
+      <details className="mt-12 max-w-[640px] rounded-2xl border border-line bg-graphite p-5">
+        <summary className="cursor-pointer list-none text-[14px] text-mute hover:text-paper [&::-webkit-details-marker]:hidden">Project verwijderen…</summary>
+        <form action={deleteProject} className="mt-4 space-y-3">
+          <input type="hidden" name="id" value={project.id} />
+          <label className="flex cursor-pointer items-start gap-2.5 text-[14px] text-mute">
+            <input type="checkbox" name="confirm" required className="mt-1 accent-[var(--color-danger)]" />
+            Ja, verwijder dit project definitief. De bestanden zelf blijven bestaan.
+          </label>
+          <button type="submit" className="min-h-[40px] rounded-full border border-danger/50 px-4 text-[14px] text-danger transition-colors hover:bg-danger/10">
+            Project verwijderen
+          </button>
+        </form>
+      </details>
     </div>
   );
 }

@@ -1,6 +1,16 @@
 import "server-only";
 import postgres from "postgres";
-import type { NewQuoteRequest, Project, ProjectInput, QuoteRequest, RequestStatus, Storage } from "./types";
+import type {
+  Appointment,
+  AppointmentInput,
+  NewQuoteRequest,
+  Project,
+  ProjectInput,
+  QuoteRequest,
+  RequestEvent,
+  RequestStatus,
+  Storage,
+} from "./types";
 
 /**
  * Postgres-opslag voor productie (bijv. Neon, Supabase, Vercel Postgres).
@@ -59,6 +69,31 @@ function ensureSchema() {
           created_at timestamptz not null default now(),
           updated_at timestamptz not null default now()
         )`;
+      // Aanvullingen (additief, bestaande gegevens blijven staan).
+      await db`alter table quote_requests add column if not exists price_cents integer`;
+      await db`
+        create table if not exists request_events (
+          id uuid primary key default gen_random_uuid(),
+          request_id uuid not null references quote_requests(id) on delete cascade,
+          created_at timestamptz not null default now(),
+          kind text not null,
+          body text not null default ''
+        )`;
+      await db`create index if not exists request_events_request_idx on request_events (request_id, created_at)`;
+      await db`
+        create table if not exists appointments (
+          id uuid primary key default gen_random_uuid(),
+          kind text not null,
+          title text not null,
+          request_id uuid references quote_requests(id) on delete set null,
+          start_date date not null,
+          end_date date not null,
+          start_time text,
+          end_time text,
+          notes text,
+          created_at timestamptz not null default now()
+        )`;
+      await db`create index if not exists appointments_dates_idx on appointments (start_date, end_date)`;
     })().catch((err) => {
       ready = null;
       throw err;
@@ -82,6 +117,46 @@ function toRequest(r: any): QuoteRequest {
     message: r.message,
     preferredDate: r.preferred_date ? new Date(r.preferred_date).toISOString().slice(0, 10) : null,
     status: r.status,
+    priceCents: r.price_cents ?? null,
+  };
+}
+
+/** Datums komen als tekst (::text) binnen, zodat tijdzones nooit een dag verschuiven. */
+function toAppointment(r: any): Appointment {
+  return {
+    id: r.id,
+    kind: r.kind,
+    title: r.title,
+    requestId: r.request_id,
+    startDate: r.sd,
+    endDate: r.ed,
+    startTime: r.start_time,
+    endTime: r.end_time,
+    notes: r.notes,
+    createdAt: new Date(r.created_at).toISOString(),
+  };
+}
+
+function appointmentColumns(a: AppointmentInput) {
+  return {
+    kind: a.kind,
+    title: a.title,
+    request_id: a.requestId,
+    start_date: a.startDate,
+    end_date: a.endDate,
+    start_time: a.startTime,
+    end_time: a.endTime,
+    notes: a.notes,
+  };
+}
+
+function toEvent(r: any): RequestEvent {
+  return {
+    id: r.id,
+    requestId: r.request_id,
+    createdAt: new Date(r.created_at).toISOString(),
+    kind: r.kind,
+    body: r.body,
   };
 }
 
@@ -150,9 +225,95 @@ export const postgresStorage: Storage = {
     return rows.map(toRequest);
   },
 
+  async getRequest(id) {
+    await ensureSchema();
+    const rows = await sql()`select * from quote_requests where id = ${id}`;
+    return rows[0] ? toRequest(rows[0]) : null;
+  },
+
   async updateRequestStatus(id: string, status: RequestStatus) {
     await ensureSchema();
-    const rows = await sql()`update quote_requests set status = ${status} where id = ${id} returning id`;
+    return sql().begin(async (tx) => {
+      const prev = await tx`select status from quote_requests where id = ${id} for update`;
+      if (prev.length === 0) return false;
+      if (prev[0].status === status) return true;
+      await tx`update quote_requests set status = ${status} where id = ${id}`;
+      await tx`insert into request_events (request_id, kind, body) values (${id}, 'status', ${status})`;
+      return true;
+    });
+  },
+
+  async setRequestPrice(id, priceCents) {
+    await ensureSchema();
+    return sql().begin(async (tx) => {
+      const prev = await tx`select price_cents from quote_requests where id = ${id} for update`;
+      if (prev.length === 0) return false;
+      if ((prev[0].price_cents ?? null) === priceCents) return true;
+      await tx`update quote_requests set price_cents = ${priceCents} where id = ${id}`;
+      await tx`insert into request_events (request_id, kind, body) values (${id}, 'price', ${priceCents === null ? "" : String(priceCents)})`;
+      return true;
+    });
+  },
+
+  async addRequestEvent(id, kind, body) {
+    await ensureSchema();
+    const rows = await sql()`
+      insert into request_events (request_id, kind, body)
+      select id, ${kind}, ${body} from quote_requests where id = ${id}
+      returning id`;
+    return rows.length > 0;
+  },
+
+  async listAppointments(opts) {
+    await ensureSchema();
+    const db = sql();
+    const rows = opts?.requestId
+      ? await db`select *, start_date::text as sd, end_date::text as ed from appointments
+                 where request_id = ${opts.requestId} order by start_date, start_time nulls first`
+      : await db`select *, start_date::text as sd, end_date::text as ed from appointments
+                 where (${opts?.to ?? null}::date is null or start_date <= ${opts?.to ?? null}::date)
+                   and (${opts?.from ?? null}::date is null or end_date >= ${opts?.from ?? null}::date)
+                 order by start_date, start_time nulls first`;
+    return rows.map(toAppointment);
+  },
+
+  async getAppointment(id) {
+    await ensureSchema();
+    const rows = await sql()`select *, start_date::text as sd, end_date::text as ed from appointments where id = ${id}`;
+    return rows[0] ? toAppointment(rows[0]) : null;
+  },
+
+  async createAppointment(input) {
+    await ensureSchema();
+    const db = sql();
+    const rows = await db`insert into appointments ${db(appointmentColumns(input))}
+                          returning *, start_date::text as sd, end_date::text as ed`;
+    return toAppointment(rows[0]);
+  },
+
+  async updateAppointment(id, input) {
+    await ensureSchema();
+    const db = sql();
+    const rows = await db`update appointments set ${db(appointmentColumns(input))} where id = ${id}
+                          returning *, start_date::text as sd, end_date::text as ed`;
+    return rows[0] ? toAppointment(rows[0]) : null;
+  },
+
+  async deleteAppointment(id) {
+    await ensureSchema();
+    const rows = await sql()`delete from appointments where id = ${id} returning id`;
+    return rows.length > 0;
+  },
+
+  async listRequestEvents(id) {
+    await ensureSchema();
+    const rows = await sql()`select * from request_events where request_id = ${id} order by created_at asc`;
+    return rows.map(toEvent);
+  },
+
+  async deleteRequest(id) {
+    await ensureSchema();
+    const rows = await sql()`delete from quote_requests where id = ${id} returning id`;
     return rows.length > 0;
   },
 

@@ -5,7 +5,15 @@ import { redirect } from "next/navigation";
 import { z } from "zod";
 import { SERVICE_SLUGS } from "@/config/services";
 import { authConfigError, checkPassword, createSession, destroySession, requireAdmin } from "@/lib/auth";
-import { ASPECTS, getStorage, PROJECT_TYPES, REQUEST_STATUSES, type ProjectInput } from "@/lib/storage";
+import {
+  APPOINTMENT_KINDS,
+  ASPECTS,
+  getStorage,
+  PROJECT_TYPES,
+  REQUEST_STATUSES,
+  type AppointmentInput,
+  type ProjectInput,
+} from "@/lib/storage";
 
 /* ---------- Inloggen ---------- */
 
@@ -49,7 +57,150 @@ export async function updateRequestStatus(fd: FormData) {
   if (!id.success || !status.success) return;
   const storage = await getStorage();
   await storage.updateRequestStatus(id.data, status.data);
-  revalidatePath("/beheer");
+  revalidatePath("/beheer", "layout");
+}
+
+export type RequestFormState = { ok?: boolean; error?: string };
+
+export async function addRequestNote(_prev: RequestFormState, fd: FormData): Promise<RequestFormState> {
+  await requireAdmin();
+  const id = z.string().uuid().safeParse(fd.get("id"));
+  const text = z.string().trim().min(1, "Schrijf eerst een notitie.").max(4000, "Houd de notitie korter dan 4000 tekens.").safeParse(fd.get("text"));
+  if (!id.success) return { error: "Onbekende aanvraag." };
+  if (!text.success) return { error: text.error.issues[0]?.message };
+  const ok = await (await getStorage()).addRequestEvent(id.data, "note", text.data);
+  if (!ok) return { error: "Deze aanvraag bestaat niet meer." };
+  revalidatePath(`/beheer/aanvragen/${id.data}`);
+  return { ok: true };
+}
+
+/** "1.250", "1250,50", "€ 1.250,-" → centen. Leeg = prijs wissen. */
+function parseEuro(raw: string): number | null | "invalid" {
+  const s = raw.replace(/[€\s]/g, "").replace(/,-$/, "");
+  if (s === "") return null;
+  const normalized = s.includes(",") ? s.replace(/\./g, "").replace(",", ".") : /^\d{1,3}(\.\d{3})+$/.test(s) ? s.replace(/\./g, "") : s;
+  const n = Number(normalized);
+  if (!Number.isFinite(n) || n < 0 || n > 1_000_000) return "invalid";
+  return Math.round(n * 100);
+}
+
+export async function setRequestPrice(_prev: RequestFormState, fd: FormData): Promise<RequestFormState> {
+  await requireAdmin();
+  const id = z.string().uuid().safeParse(fd.get("id"));
+  if (!id.success) return { error: "Onbekende aanvraag." };
+  const cents = parseEuro(String(fd.get("price") ?? ""));
+  if (cents === "invalid") return { error: "Vul een bedrag in, bijvoorbeeld 1250 of 1.250,00." };
+  const ok = await (await getStorage()).setRequestPrice(id.data, cents);
+  if (!ok) return { error: "Deze aanvraag bestaat niet meer." };
+  revalidatePath("/beheer", "layout");
+  return { ok: true };
+}
+
+export async function deleteRequest(fd: FormData) {
+  await requireAdmin();
+  const id = z.string().uuid().safeParse(fd.get("id"));
+  if (!id.success || fd.get("confirm") !== "on") return;
+  await (await getStorage()).deleteRequest(id.data);
+  revalidatePath("/beheer", "layout");
+  redirect("/beheer/aanvragen?verwijderd=1");
+}
+
+/* ---------- Agenda ---------- */
+
+const ymdRe = /^\d{4}-\d{2}-\d{2}$/;
+const hmRe = /^([01]\d|2[0-3]):[0-5]\d$/;
+
+const appointmentSchema = z
+  .object({
+    kind: z.enum(APPOINTMENT_KINDS),
+    title: z.string().trim().min(2, "Geef de afspraak een titel.").max(120),
+    requestId: z.union([z.string().uuid(), z.literal("")]).transform((v) => v || null),
+    startDate: z.string().regex(ymdRe, "Kies een startdatum."),
+    endDate: z.string().regex(ymdRe, "Kies een einddatum."),
+    allDay: z.boolean(),
+    startTime: z.string(),
+    endTime: z.string(),
+    notes: z.string().trim().max(2000).transform((v) => v || null),
+  })
+  .superRefine((a, ctx) => {
+    if (a.endDate < a.startDate) ctx.addIssue({ code: "custom", path: ["endDate"], message: "De einddatum ligt vóór de startdatum." });
+    if (!a.allDay) {
+      if (!hmRe.test(a.startTime)) ctx.addIssue({ code: "custom", path: ["startTime"], message: "Kies een starttijd." });
+      if (!hmRe.test(a.endTime)) ctx.addIssue({ code: "custom", path: ["endTime"], message: "Kies een eindtijd." });
+      if (a.startDate === a.endDate && hmRe.test(a.startTime) && hmRe.test(a.endTime) && a.endTime <= a.startTime)
+        ctx.addIssue({ code: "custom", path: ["endTime"], message: "De eindtijd ligt vóór de starttijd." });
+    }
+  });
+
+export type AppointmentFormState = { errors?: Record<string, string>; formError?: string; values?: Record<string, string> };
+
+export async function saveAppointment(id: string | null, _prev: AppointmentFormState, fd: FormData): Promise<AppointmentFormState> {
+  await requireAdmin();
+  const raw = {
+    kind: String(fd.get("kind") ?? "werk"),
+    title: String(fd.get("title") ?? ""),
+    requestId: String(fd.get("requestId") ?? ""),
+    startDate: String(fd.get("startDate") ?? ""),
+    endDate: String(fd.get("endDate") ?? "") || String(fd.get("startDate") ?? ""),
+    startTime: String(fd.get("startTime") ?? ""),
+    endTime: String(fd.get("endTime") ?? ""),
+    notes: String(fd.get("notes") ?? ""),
+  };
+  const allDay = fd.get("allDay") === "on";
+  const values = { ...raw, allDay: allDay ? "on" : "" };
+  const parsed = appointmentSchema.safeParse({ ...raw, allDay });
+  if (!parsed.success) {
+    const errors: Record<string, string> = {};
+    for (const issue of parsed.error.issues) errors[String(issue.path[0] ?? "form")] ??= issue.message;
+    return { errors, values };
+  }
+  const a = parsed.data;
+  const input: AppointmentInput = {
+    kind: a.kind,
+    title: a.title,
+    requestId: a.kind === "blokkade" ? null : a.requestId,
+    startDate: a.startDate,
+    endDate: a.endDate,
+    startTime: a.allDay ? null : a.startTime,
+    endTime: a.allDay ? null : a.endTime,
+    notes: a.notes,
+  };
+
+  try {
+    const storage = await getStorage();
+    if (id) {
+      const updated = await storage.updateAppointment(id, input);
+      if (!updated) return { formError: "Deze afspraak bestaat niet meer.", values };
+    } else {
+      await storage.createAppointment(input);
+      // Nieuw ingepland werk aan een aanvraag: tijdlijn bijwerken en status doorzetten.
+      if (input.requestId) {
+        const req = await storage.getRequest(input.requestId);
+        if (req) {
+          await storage.addRequestEvent(req.id, "planned", input.startDate);
+          if ((req.status === "nieuw" || req.status === "in-behandeling") && input.kind === "werk") {
+            await storage.updateRequestStatus(req.id, "ingepland");
+          }
+        }
+      }
+    }
+  } catch (err) {
+    console.error("[beheer] Afspraak opslaan mislukt:", err);
+    return { formError: "Opslaan mislukt. Probeer het opnieuw.", values };
+  }
+  revalidatePath("/beheer", "layout");
+  redirect(`/beheer/agenda?maand=${input.startDate.slice(0, 7)}&opgeslagen=1`);
+}
+
+export async function deleteAppointment(fd: FormData) {
+  await requireAdmin();
+  const id = z.string().uuid().safeParse(fd.get("id"));
+  if (!id.success) return;
+  const storage = await getStorage();
+  const a = await storage.getAppointment(id.data);
+  await storage.deleteAppointment(id.data);
+  revalidatePath("/beheer", "layout");
+  redirect(`/beheer/agenda${a ? `?maand=${a.startDate.slice(0, 7)}` : ""}`);
 }
 
 /* ---------- Projecten ---------- */

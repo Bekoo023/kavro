@@ -2,13 +2,24 @@ import "server-only";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import type { NewQuoteRequest, Project, ProjectInput, QuoteRequest, RequestStatus, Storage } from "./types";
+import type {
+  Appointment,
+  AppointmentInput,
+  NewQuoteRequest,
+  Project,
+  ProjectInput,
+  QuoteRequest,
+  RequestEvent,
+  RequestEventKind,
+  RequestStatus,
+  Storage,
+} from "./types";
 
 /**
  * Bestandsopslag voor lokale ontwikkeling, of voor een eigen server met een
  * blijvende schijf. Niet geschikt voor serverless hosting (Vercel e.d.).
  */
-type Db = { requests: QuoteRequest[]; projects: Project[] };
+type Db = { requests: QuoteRequest[]; projects: Project[]; events: RequestEvent[]; appointments: Appointment[] };
 
 const DATA_DIR = process.env.DATA_DIR || path.join(process.cwd(), "data");
 const DB_FILE = path.join(DATA_DIR, "studio-db.json");
@@ -26,9 +37,15 @@ async function read(): Promise<Db> {
   try {
     const raw = await fs.readFile(DB_FILE, "utf8");
     const parsed = JSON.parse(raw) as Partial<Db>;
-    return { requests: parsed.requests ?? [], projects: parsed.projects ?? [] };
+    return {
+      // Oudere bestanden hebben nog geen priceCents/events.
+      requests: (parsed.requests ?? []).map((r) => ({ ...r, priceCents: r.priceCents ?? null })),
+      projects: parsed.projects ?? [],
+      events: parsed.events ?? [],
+      appointments: parsed.appointments ?? [],
+    };
   } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === "ENOENT") return { requests: [], projects: [] };
+    if ((err as NodeJS.ErrnoException).code === "ENOENT") return { requests: [], projects: [], events: [], appointments: [] };
     throw err;
   }
 }
@@ -38,6 +55,10 @@ async function write(db: Db) {
   const tmp = `${DB_FILE}.${process.pid}.tmp`;
   await fs.writeFile(tmp, JSON.stringify(db, null, 2), "utf8");
   await fs.rename(tmp, DB_FILE);
+}
+
+function newEvent(requestId: string, kind: RequestEventKind, body: string): RequestEvent {
+  return { id: randomUUID(), requestId, createdAt: new Date().toISOString(), kind, body };
 }
 
 function sortProjects(list: Project[]) {
@@ -57,6 +78,7 @@ export const fileStorage: Storage = {
         id: randomUUID(),
         createdAt: new Date().toISOString(),
         status: "nieuw",
+        priceCents: null,
       };
       db.requests.push(request);
       await write(db);
@@ -68,12 +90,103 @@ export const fileStorage: Storage = {
     return [...db.requests].sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   },
 
+  async getRequest(id) {
+    const db = await read();
+    return db.requests.find((r) => r.id === id) ?? null;
+  },
+
   updateRequestStatus: (id: string, status: RequestStatus) =>
     exclusive(async () => {
       const db = await read();
       const r = db.requests.find((x) => x.id === id);
       if (!r) return false;
+      if (r.status === status) return true;
       r.status = status;
+      db.events.push(newEvent(id, "status", status));
+      await write(db);
+      return true;
+    }),
+
+  setRequestPrice: (id: string, priceCents: number | null) =>
+    exclusive(async () => {
+      const db = await read();
+      const r = db.requests.find((x) => x.id === id);
+      if (!r) return false;
+      if (r.priceCents === priceCents) return true;
+      r.priceCents = priceCents;
+      db.events.push(newEvent(id, "price", priceCents === null ? "" : String(priceCents)));
+      await write(db);
+      return true;
+    }),
+
+  addRequestEvent: (id: string, kind: "note" | "planned", body: string) =>
+    exclusive(async () => {
+      const db = await read();
+      if (!db.requests.some((x) => x.id === id)) return false;
+      db.events.push(newEvent(id, kind, body));
+      await write(db);
+      return true;
+    }),
+
+  async listAppointments(opts) {
+    const db = await read();
+    return db.appointments
+      .filter((a) =>
+        opts?.requestId
+          ? a.requestId === opts.requestId
+          : (!opts?.to || a.startDate <= opts.to) && (!opts?.from || a.endDate >= opts.from),
+      )
+      .sort((a, b) => a.startDate.localeCompare(b.startDate) || (a.startTime ?? "").localeCompare(b.startTime ?? ""));
+  },
+
+  async getAppointment(id) {
+    const db = await read();
+    return db.appointments.find((a) => a.id === id) ?? null;
+  },
+
+  createAppointment: (input: AppointmentInput) =>
+    exclusive(async () => {
+      const db = await read();
+      const a: Appointment = { ...input, id: randomUUID(), createdAt: new Date().toISOString() };
+      db.appointments.push(a);
+      await write(db);
+      return a;
+    }),
+
+  updateAppointment: (id: string, input: AppointmentInput) =>
+    exclusive(async () => {
+      const db = await read();
+      const idx = db.appointments.findIndex((a) => a.id === id);
+      if (idx === -1) return null;
+      db.appointments[idx] = { ...db.appointments[idx], ...input };
+      await write(db);
+      return db.appointments[idx];
+    }),
+
+  deleteAppointment: (id: string) =>
+    exclusive(async () => {
+      const db = await read();
+      const before = db.appointments.length;
+      db.appointments = db.appointments.filter((a) => a.id !== id);
+      if (db.appointments.length === before) return false;
+      await write(db);
+      return true;
+    }),
+
+  async listRequestEvents(id) {
+    const db = await read();
+    return db.events.filter((e) => e.requestId === id).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  },
+
+  deleteRequest: (id: string) =>
+    exclusive(async () => {
+      const db = await read();
+      const before = db.requests.length;
+      db.requests = db.requests.filter((r) => r.id !== id);
+      if (db.requests.length === before) return false;
+      db.events = db.events.filter((e) => e.requestId !== id);
+      // Zelfde gedrag als Postgres (on delete set null): afspraak blijft, koppeling vervalt.
+      db.appointments = db.appointments.map((a) => (a.requestId === id ? { ...a, requestId: null } : a));
       await write(db);
       return true;
     }),
