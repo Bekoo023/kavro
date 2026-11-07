@@ -19,12 +19,12 @@ const geist = localFont({
   display: "swap",
 });
 
-const description = "PPF, chrome delete en window tinting. Vraag eenvoudig een offerte aan.";
+const description = "PPF en chrome delete. Vraag eenvoudig een offerte aan.";
 
 export const metadata: Metadata = {
   metadataBase: new URL(site.url),
   title: {
-    default: `${site.name} | PPF, chrome delete en window tinting`,
+    default: `${site.name} | PPF en chrome delete`,
     template: `%s | ${site.name}`,
   },
   description,
@@ -33,7 +33,7 @@ export const metadata: Metadata = {
     type: "website",
     locale: "nl_NL",
     siteName: site.name,
-    title: `${site.name} | PPF, chrome delete en window tinting`,
+    title: `${site.name} | PPF en chrome delete`,
     description,
   },
   twitter: { card: "summary_large_image" },

@@ -1,6 +1,6 @@
 import "server-only";
 import { site } from "@/config/site";
-import { finishes, services } from "@/config/services";
+import { finishes, serviceName } from "@/config/services";
 import type { QuoteRequest } from "@/lib/storage/types";
 
 /**
@@ -20,7 +20,7 @@ export async function notifyNewRequest(r: QuoteRequest): Promise<"sent" | "skipp
   if (!mailConfigured()) return "skipped";
 
   const rows: [string, string][] = [
-    ["Dienst", r.services.map((s) => services[s].name).join(", ")],
+    ["Dienst", r.services.map((s) => serviceName(s)).join(", ")],
     ...(r.finish ? [["Afwerking", finishes[r.finish].name] as [string, string]] : []),
     ["Auto", r.vehicle],
     ["Naam", r.name],

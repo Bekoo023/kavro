@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { finishes, services } from "@/config/services";
+import { finishes, serviceName } from "@/config/services";
 import { telHref } from "@/config/site";
 import { requireAdmin } from "@/lib/auth";
 import { getStorage, statusLabels, type RequestEvent, type RequestStatus } from "@/lib/storage";
@@ -57,7 +57,7 @@ export default async function RequestDetailPage({ params }: PageProps<"/beheer/a
               Aanvraag
             </h2>
             <dl className="mt-4 grid gap-x-8 gap-y-4 sm:grid-cols-2">
-              <Field label="Dienst">{r.services.map((s) => services[s]?.name ?? s).join(", ")}</Field>
+              <Field label="Dienst">{r.services.map((s) => serviceName(s)).join(", ")}</Field>
               {r.finish && <Field label="Afwerking">{finishes[r.finish]?.name ?? r.finish}</Field>}
               <Field label="Auto">{r.vehicle}</Field>
               <Field label="Voorkeursdatum">

@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { services } from "@/config/services";
+import { serviceName, services } from "@/config/services";
 import { requireAdmin } from "@/lib/auth";
 import { getStorage, type Appointment, type QuoteRequest } from "@/lib/storage";
 import { kindDot, timeLabel } from "../_components/appointment-ui";
@@ -74,7 +74,7 @@ export default async function DashboardPage() {
                           {r.name}
                         </span>
                         <span className="block truncate text-[13.5px] text-mute">
-                          {r.vehicle} · {r.services.map((s) => services[s]?.short ?? s).join(" + ")}
+                          {r.vehicle} · {r.services.map((s) => services[s]?.short ?? serviceName(s)).join(" + ")}
                         </span>
                       </span>
                       <span className={`shrink-0 text-[13px] ${waiting >= 2 ? "text-accent" : "text-mute-2"}`}>{ago(r.createdAt)}</span>

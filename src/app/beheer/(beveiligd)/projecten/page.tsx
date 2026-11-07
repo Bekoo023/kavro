@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { services } from "@/config/services";
+import { serviceName } from "@/config/services";
 import { requireAdmin } from "@/lib/auth";
 import { getStorage, type Project } from "@/lib/storage";
 import { setPublished } from "../../actions";
@@ -82,7 +82,7 @@ export default async function ProjectsPage({ searchParams }: PageProps<"/beheer/
                   {p.title}
                 </Link>
                 <p className="mt-1 text-[13px] text-mute">
-                  {[p.vehicle, p.service ? services[p.service]?.name : null].filter(Boolean).join(" · ") || "Geen dienst of auto"}
+                  {[p.vehicle, p.service ? serviceName(p.service) : null].filter(Boolean).join(" · ") || "Geen dienst of auto"}
                   <span className="text-mute-2"> · volgorde {p.sortOrder}</span>
                 </p>
                 <div className="mt-auto flex items-center gap-2 pt-4">

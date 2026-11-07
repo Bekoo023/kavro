@@ -52,6 +52,8 @@ export const media: {
   hero: HeroVideo;
   transformation: PhotoSequence | null;
   services: Record<ServiceSlug, PhotoAsset | null>;
+  /** Sfeerbeelden: slotsectie (garage), werkwijze (werkplaats) en 'Waarom Kavro' (detail). */
+  atmosphere: { garage: PhotoAsset; workshop: PhotoAsset; edgeDetail: PhotoAsset };
 } = {
   hero: {
     src: "/media/hero/hero.mp4",
@@ -86,11 +88,26 @@ export const media: {
       width: 1586,
       height: 992,
     },
-    "window-tinting": {
-      src: "/media/diensten/window-tinting.png",
-      alt: "Getinte achterste zijruiten van een grafietgrijze sedan in een werkplaats",
-      width: 1586,
-      height: 992,
+
+  },
+  atmosphere: {
+    garage: {
+      src: "/media/sfeer/garage-avond.jpg",
+      alt: "Grijze coupé in een donkere werkplaats bij schemering, met de roldeur open",
+      width: 2400,
+      height: 1018,
+    },
+    workshop: {
+      src: "/media/sfeer/werkplaats.jpg",
+      alt: "Werkplaats met een grijze coupé, rollen folie aan de muur en rakels, hittepistool en tape op de werkbank",
+      width: 1400,
+      height: 1738,
+    },
+    edgeDetail: {
+      src: "/media/sfeer/folierand-detail.jpg",
+      alt: "Macrofoto van transparante folie die strak langs de rand van een koplamp is ingelegd",
+      width: 1400,
+      height: 1738,
     },
   },
 };

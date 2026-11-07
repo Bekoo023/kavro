@@ -2,16 +2,15 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import { randomUUID } from "node:crypto";
 import { ViewTransition } from "react";
-import { TintOverlay, TintProvider } from "@/components/tint/tint";
 import { media, serviceImageTransition } from "@/config/media";
-import { DEFAULT_TINT, finishes, isFinishSlug, isServiceSlug, parseTint } from "@/config/services";
+import { finishes, isFinishSlug, isServiceSlug } from "@/config/services";
 import { site, telHref } from "@/config/site";
 import { emptyQuoteFields, todayIso } from "@/lib/quote-schema";
 import { QuoteForm } from "./quote-form";
 
 export const metadata: Metadata = {
   title: "Offerte aanvragen",
-  description: "Vraag een offerte aan voor PPF, chrome delete of window tinting. Kies je dienst en vul je auto en contactgegevens in.",
+  description: "Vraag een offerte aan voor PPF of chrome delete. Kies je dienst en vul je auto en contactgegevens in.",
   alternates: { canonical: "/offerte" },
 };
 
@@ -26,13 +25,8 @@ export default async function OffertePage({ searchParams }: PageProps<"/offerte"
   const dienst = Array.isArray(sp.dienst) ? sp.dienst[0] : sp.dienst;
   const afwerking = Array.isArray(sp.afwerking) ? sp.afwerking[0] : sp.afwerking;
 
-  const tintParam = Array.isArray(sp.tint) ? sp.tint[0] : sp.tint;
-
   const preService = isServiceSlug(dienst) ? [dienst] : [];
   const preFinish = isFinishSlug(afwerking) ? afwerking : "";
-  // Tint uit de kiezer op de homepage. Er is geen apart tintveld, dus hij gaat als opmerking mee.
-  const preTint = dienst === "window-tinting" ? parseTint(tintParam) : null;
-  const preMessage = preTint ? `Gewenste tint: ${preTint}% lichtdoorlatendheid.` : "";
   const headerPhoto = preService[0] ? media.services[preService[0]] : null;
 
   return (
@@ -52,11 +46,6 @@ export default async function OffertePage({ searchParams }: PageProps<"/offerte"
                     sizes="(min-width: 1024px) 560px, 100vw"
                     className="object-cover"
                   />
-                  {preService[0] === "window-tinting" && (
-                    <TintProvider initial={preTint ?? DEFAULT_TINT}>
-                      <TintOverlay />
-                    </TintProvider>
-                  )}
                 </div>
               </ViewTransition>
             )}
@@ -67,11 +56,6 @@ export default async function OffertePage({ searchParams }: PageProps<"/offerte"
             {preFinish && (
               <p className="chip mt-6 !text-paper">
                 Gekozen afwerking: <strong className="font-medium">{finishes[preFinish].name}</strong>
-              </p>
-            )}
-            {preTint && (
-              <p className="chip mt-6 !text-paper">
-                Gekozen tint: <strong className="font-medium tabular-nums">{preTint}%</strong>
               </p>
             )}
 
@@ -109,7 +93,7 @@ export default async function OffertePage({ searchParams }: PageProps<"/offerte"
         <div className="lg:col-span-7">
           <div className="card p-6 sm:p-8 md:p-10">
             <QuoteForm
-              initial={{ ...emptyQuoteFields, services: preService, finish: preFinish, message: preMessage }}
+              initial={{ ...emptyQuoteFields, services: preService, finish: preFinish }}
               submissionId={randomUUID()}
               minDate={todayIso()}
             />

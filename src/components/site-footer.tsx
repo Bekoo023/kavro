@@ -12,7 +12,7 @@ export function SiteFooter() {
       <div className="wrap grid gap-12 pt-16 pb-12 md:grid-cols-12 md:pt-20">
         <div className="md:col-span-5">
           <BrandLogo className="h-7" />
-          <p className="mt-4 max-w-[34ch] text-mute">PPF, chrome delete en window tinting.</p>
+          <p className="mt-4 max-w-[34ch] text-mute">PPF en chrome delete.</p>
           <Link href="/offerte" className="btn-primary mt-8">
             Offerte aanvragen
             <Arrow />

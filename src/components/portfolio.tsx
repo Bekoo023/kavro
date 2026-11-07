@@ -1,7 +1,7 @@
 "use client";
 
 import { useId, useRef, useState } from "react";
-import { services } from "@/config/services";
+import { serviceName } from "@/config/services";
 import type { Project } from "@/lib/storage/types";
 
 export function PortfolioGrid({ projects }: { projects: Project[] }) {
@@ -13,7 +13,7 @@ export function PortfolioGrid({ projects }: { projects: Project[] }) {
           <div className="mt-4 flex flex-wrap items-baseline justify-between gap-x-6 gap-y-1">
             <h3 className="display text-[30px] md:text-[36px]">{p.title}</h3>
             <p className="text-[14px] text-mute-2">
-              {[p.vehicle, p.service ? services[p.service].name : null].filter(Boolean).join(" · ")}
+              {[p.vehicle, p.service ? serviceName(p.service) : null].filter(Boolean).join(" · ")}
             </p>
           </div>
           {p.description && <p className="mt-2 max-w-[60ch] text-mute">{p.description}</p>}

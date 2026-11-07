@@ -4,13 +4,12 @@ import Image from "next/image";
 import { Arrow } from "@/components/arrow";
 import { Hero } from "@/components/hero/hero";
 import { TrimArtwork } from "@/components/art/trim-artwork";
-import { PpfArtwork, TintArtwork } from "@/components/art/service-art";
+import { PpfArtwork } from "@/components/art/service-art";
 import { PpfSheen } from "@/components/art/ppf-sheen";
 import { Faq } from "@/components/faq";
 import { Marquee } from "@/components/marquee";
 import { PortfolioGrid } from "@/components/portfolio";
 import { ProcessSteps } from "@/components/process-steps";
-import { TintNote, TintOverlay, TintPicker, TintProvider, TintQuoteLink } from "@/components/tint/tint";
 import { Transformation } from "@/components/transformation";
 import { media, serviceImageTransition, type PhotoAsset } from "@/config/media";
 import { quoteHref, services, type ServiceSlug } from "@/config/services";
@@ -19,7 +18,7 @@ import { getPublishedProjectsSafe } from "@/lib/storage";
 
 export const dynamic = "force-dynamic";
 
-const MARQUEE = ["Paint Protection Film", "Chrome Delete", "Window Tinting", "Satijnzwart", "Steenslagbescherming", "Getint glas"];
+const MARQUEE = ["Paint Protection Film", "Chrome Delete", "Satijnzwart", "Steenslagbescherming", "Lakbescherming", "Omkeerbaar"];
 
 const STEPS = [
   { title: "Aanvraag", text: "Vul het formulier in met je auto en wat je wilt laten doen. Dat kost een paar minuten." },
@@ -43,10 +42,6 @@ const FAQ = [
   {
     q: "Kan chrome delete weer ongedaan gemaakt worden?",
     a: "Ja. Chrome delete doen we met folie, dus de originele lijsten blijven eronder bewaard.",
-  },
-  {
-    q: "Welke ramen mogen getint worden?",
-    a: "In Nederland gelden regels voor de voorruit en de voorste zijruiten. We bespreken vooraf welke ramen in aanmerking komen en welke tint je zoekt.",
   },
   {
     q: "Op welke delen zet je PPF?",
@@ -80,7 +75,7 @@ export default async function HomePage() {
         <div className="mt-8 lg:mt-10">
           <div>
             <p className="intro-fade max-w-[44ch] text-[18px] leading-relaxed text-mute lg:text-[20px]" style={{ "--d": "560ms" } as React.CSSProperties}>
-              PPF, chrome delete en window tinting. Met aandacht voor elke rand en elke lijn van je auto.
+              PPF en chrome delete. Met aandacht voor elke rand en elke lijn van je auto.
             </p>
             <div className="intro-fade mt-8 flex flex-wrap items-center gap-3" style={{ "--d": "640ms" } as React.CSSProperties}>
               <Link href="/offerte" className="btn-primary">
@@ -104,10 +99,10 @@ export default async function HomePage() {
           <SectionHead
             id="diensten-titel"
             title="Wat we doen"
-            text="Lak beschermen, chroom zwart maken of ramen tinten. Twijfel je wat bij jouw auto past? Vraag het gerust."
+            text="Lak beschermen of chroom zwart maken. Twijfel je wat bij jouw auto past? Vraag het gerust."
           />
 
-          <div className="mt-12 grid gap-4 md:mt-16 md:grid-cols-3 lg:gap-5">
+          <div className="mt-12 grid gap-4 md:mt-16 md:grid-cols-2 lg:gap-5">
             <ServiceCard slug="ppf" index={0} overlay={<PpfSheen />}>
               <PpfArtwork className="absolute inset-0 h-full w-full" />
             </ServiceCard>
@@ -121,18 +116,6 @@ export default async function HomePage() {
                 title="Illustratie: raamomlijsting, links chroom en rechts satijnzwart"
               />
             </ServiceCard>
-            <TintProvider>
-              <ServiceCard
-                slug="window-tinting"
-                index={2}
-                overlay={<TintOverlay />}
-                controls={<TintPicker />}
-                extra={<TintNote />}
-                QuoteLink={TintQuoteLink}
-              >
-                <TintArtwork className="absolute inset-0 h-full w-full" />
-              </ServiceCard>
-            </TintProvider>
           </div>
         </div>
       </section>
@@ -161,6 +144,19 @@ export default async function HomePage() {
             text="Je aanvraag is zo gedaan. Daarna stemmen we alles samen met je af."
           />
           <div className="mt-14 md:mt-20 lg:grid lg:grid-cols-12 lg:gap-10">
+            {/* Werkplaatsfoto naast de tijdlijn (alleen desktop, daar was de linkerkolom leeg). */}
+            <div className="hidden lg:col-span-4 lg:block">
+              <div className="sticky top-[calc(var(--header-h)+48px)] overflow-hidden rounded-[24px] border border-line bg-graphite">
+                <Image
+                  src={media.atmosphere.workshop.src}
+                  alt={media.atmosphere.workshop.alt}
+                  width={media.atmosphere.workshop.width}
+                  height={media.atmosphere.workshop.height}
+                  sizes="(min-width: 1440px) 420px, 30vw"
+                  className="aspect-[4/5] h-auto w-full object-cover"
+                />
+              </div>
+            </div>
             <div className="lg:col-span-7 lg:col-start-6">
               <ProcessSteps steps={STEPS} />
             </div>
@@ -183,6 +179,17 @@ export default async function HomePage() {
                 Vraag een offerte aan
                 <Arrow />
               </Link>
+              {/* Detail van een folierand: bewijs bij 'Oog voor randen'. */}
+              <div className="mt-10 overflow-hidden rounded-[24px] border border-line bg-graphite">
+                <Image
+                  src={media.atmosphere.edgeDetail.src}
+                  alt={media.atmosphere.edgeDetail.alt}
+                  width={media.atmosphere.edgeDetail.width}
+                  height={media.atmosphere.edgeDetail.height}
+                  sizes="(min-width: 1024px) 40vw, 100vw"
+                  className="aspect-[4/3] h-auto w-full object-cover object-[50%_60%] lg:aspect-[5/4]"
+                />
+              </div>
             </div>
           </div>
           <ol className="border-t border-line lg:col-span-6 lg:col-start-7">
@@ -219,8 +226,8 @@ export default async function HomePage() {
       <section aria-labelledby="cta-titel" className="pb-24 md:pb-32">
         <div className="wrap">
           <div className="relative overflow-hidden rounded-[24px] border border-line px-6 py-16 md:px-16 md:py-24">
-            <Image src={media.hero.poster.src} alt="" fill sizes="(min-width: 1440px) 1312px, 100vw" className="object-cover" />
-            <div aria-hidden="true" className="absolute inset-0 bg-gradient-to-r from-ink via-ink/85 to-ink/40" />
+            <Image src={media.atmosphere.garage.src} alt="" fill sizes="(min-width: 1440px) 1312px, 100vw" className="object-cover object-[75%_50%]" />
+            <div aria-hidden="true" className="absolute inset-0 bg-gradient-to-r from-ink via-ink/80 to-ink/15" />
             <div className="relative max-w-[640px]">
               <h2 id="cta-titel" className="display text-[52px] md:text-[88px]">
                 Benieuwd wat het kost?
@@ -268,24 +275,17 @@ function SectionHead({ id, title, text }: { id: string; title: React.ReactNode; 
 
 /**
  * Compacte dienstkaart: beeld, naam, korte uitleg, kernpunten en een link naar de offerte.
- * Optioneel: `overlay` over de foto (schaalt mee), `controls` op de foto (vast), `extra`
- * onder de kernpunten en een eigen offerte-link.
+ * Optioneel: `overlay` over de foto (schaalt mee met hover en parallax, bijv. de PPF-sheen).
  */
 function ServiceCard({
   slug,
   index = 0,
   overlay,
-  controls,
-  extra,
-  QuoteLink,
   children,
 }: {
   slug: ServiceSlug;
   index?: number;
   overlay?: React.ReactNode;
-  controls?: React.ReactNode;
-  extra?: React.ReactNode;
-  QuoteLink?: React.ComponentType<{ children: React.ReactNode }>;
   children: React.ReactNode;
 }) {
   const s = services[slug];
@@ -299,12 +299,11 @@ function ServiceCard({
         <div className="relative overflow-hidden rounded-[18px]">
           {/* Zelfde naam als de kopfoto op /offerte: bij "Offerte voor …" loopt het beeld door. */}
           <ViewTransition name={serviceImageTransition(slug)} share="morph" default="none">
-            <ServiceFrame slug={slug} overlay={overlay} className="aspect-[4/3] rounded-[18px]">
+            <ServiceFrame slug={slug} overlay={overlay} className="aspect-[4/3] rounded-[18px] md:aspect-[16/10]">
               {children}
             </ServiceFrame>
           </ViewTransition>
           {!media.services[slug] && <span className="chip absolute top-3 left-3">Illustratie</span>}
-          {controls}
         </div>
       </div>
       <div className="flex flex-1 flex-col px-6 pt-5 pb-6">
@@ -320,15 +319,10 @@ function ServiceCard({
             </li>
           ))}
         </ul>
-        {extra}
-        {QuoteLink ? (
-          <QuoteLink>Offerte voor {s.short}</QuoteLink>
-        ) : (
-          <Link href={quoteHref({ service: slug })} className="link-line mt-auto self-start pt-4 text-[15px]">
-            Offerte voor {s.short}
-            <Arrow />
-          </Link>
-        )}
+        <Link href={quoteHref({ service: slug })} className="link-line mt-auto self-start pt-4 text-[15px]">
+          Offerte voor {s.short}
+          <Arrow />
+        </Link>
       </div>
     </article>
   );
@@ -354,7 +348,7 @@ function ServiceFrame({
             className="absolute inset-0"
             style={photo.crop ? { transform: `scale(${photo.crop.scale})`, transformOrigin: `${photo.crop.x * 100}% ${photo.crop.y * 100}%` } : undefined}
           >
-            {/* Hover-zoom op een wrapper, zodat een overlay (tintmasker) exact meeschaalt met de foto. */}
+            {/* Hover-zoom op een wrapper, zodat een overlay (PPF-sheen) exact meeschaalt met de foto. */}
             <div className="absolute inset-0 transition-transform duration-700 ease-[var(--ease-soft)] group-hover:scale-[1.05]">
               {/* Ingezoomd beeld heeft meer pixels nodig om scherp te blijven. */}
               <Image src={photo.src} alt={photo.alt} fill sizes={photo.crop ? "100vw" : "(min-width: 768px) 33vw, 100vw"} className="object-cover" />

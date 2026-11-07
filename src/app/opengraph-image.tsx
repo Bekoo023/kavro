@@ -4,7 +4,7 @@ import path from "node:path";
 import { media } from "@/config/media";
 import { site } from "@/config/site";
 
-export const alt = `${site.name}: PPF, chrome delete en window tinting`;
+export const alt = `${site.name}: PPF en chrome delete`;
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
@@ -46,7 +46,7 @@ export default async function OgImage() {
           )}
           <div style={{ display: "flex", flexDirection: "column" }}>
             <div style={{ fontSize: 112, lineHeight: 0.95, textTransform: "uppercase", fontFamily: "Barlow" }}>Strak tot in het detail.</div>
-            <div style={{ marginTop: 28, fontSize: 34, color: "#B8B5AE" }}>PPF, chrome delete en window tinting</div>
+            <div style={{ marginTop: 28, fontSize: 34, color: "#B8B5AE" }}>PPF en chrome delete</div>
           </div>
         </div>
       </div>

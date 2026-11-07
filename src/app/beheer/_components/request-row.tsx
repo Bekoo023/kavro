@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { finishes, services } from "@/config/services";
+import { finishes, serviceName } from "@/config/services";
 import { telHref } from "@/config/site";
 import type { QuoteRequest } from "@/lib/storage/types";
 import { ago, euro, fmtDateShort, fmtDateTime, fromYmd, whatsappHref } from "../_lib/format";
@@ -7,7 +7,7 @@ import { StatusBadge, StatusSelect } from "./status";
 
 /** Eén aanvraag als kaart: wie, welke auto, wat, wanneer, en direct contact. */
 export function RequestRow({ r, compact = false }: { r: QuoteRequest; compact?: boolean }) {
-  const serviceNames = r.services.map((s) => services[s]?.name ?? s);
+  const serviceNames = r.services.map((s) => serviceName(s));
   return (
     <article className="grid gap-4 rounded-2xl border border-line bg-graphite p-5 transition-colors hover:border-line-strong md:grid-cols-[1fr_auto] md:gap-6">
       <div className="min-w-0">

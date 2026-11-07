@@ -1,4 +1,4 @@
-export const SERVICE_SLUGS = ["ppf", "chrome-delete", "window-tinting"] as const;
+export const SERVICE_SLUGS = ["ppf", "chrome-delete"] as const;
 export type ServiceSlug = (typeof SERVICE_SLUGS)[number];
 
 export const FINISH_SLUGS = ["satijnzwart", "origineel-chroom"] as const;
@@ -24,15 +24,15 @@ export const services: Record<
     detail: "Met folie, dus de originele lijsten blijven eronder bewaard.",
     points: ["Raamomlijstingen en sierlijsten", "Strakke satijnzwarte afwerking", "Omkeerbaar: het origineel blijft eronder bewaard"],
   },
-  "window-tinting": {
-    slug: "window-tinting",
-    name: "Window Tinting",
-    short: "Window tinting",
-    summary: "Kies een tint die past bij de uitstraling van je auto.",
-    detail: "We bespreken vooraf welke ramen in aanmerking komen en welke tint je zoekt.",
-    points: ["Achterste zijruiten en achterruit", "Van licht tot donker getint", "Vooraf advies over wat is toegestaan"],
-  },
 };
+
+/** Diensten die niet meer worden aangeboden, maar nog in oude aanvragen kunnen staan. */
+const LEGACY_NAMES: Record<string, string> = { "window-tinting": "Window tinting (niet meer aangeboden)" };
+
+/** Naam van een dienst; ook voor oude gegevens van diensten die niet meer bestaan. */
+export function serviceName(slug: string) {
+  return (services as Record<string, { name: string } | undefined>)[slug]?.name ?? LEGACY_NAMES[slug] ?? slug;
+}
 
 export const finishes: Record<FinishSlug, { slug: FinishSlug; name: string }> = {
   satijnzwart: { slug: "satijnzwart", name: "Satijnzwart" },
@@ -47,21 +47,10 @@ export function isFinishSlug(value: unknown): value is FinishSlug {
   return typeof value === "string" && (FINISH_SLUGS as readonly string[]).includes(value);
 }
 
-/** Tintopties voor window tinting: lichtdoorlatendheid in procenten (hoger = lichter). */
-export const TINTS = [50, 35, 20, 5] as const;
-export type Tint = (typeof TINTS)[number];
-export const DEFAULT_TINT: Tint = 20;
-
-export function parseTint(value: unknown): Tint | null {
-  const n = typeof value === "string" ? Number(value) : NaN;
-  return (TINTS as readonly number[]).includes(n) ? (n as Tint) : null;
-}
-
-export function quoteHref(opts: { service?: ServiceSlug; finish?: FinishSlug; tint?: Tint } = {}) {
+export function quoteHref(opts: { service?: ServiceSlug; finish?: FinishSlug } = {}) {
   const params = new URLSearchParams();
   if (opts.service) params.set("dienst", opts.service);
   if (opts.finish) params.set("afwerking", opts.finish);
-  if (opts.tint) params.set("tint", String(opts.tint));
   const qs = params.toString();
   return qs ? `/offerte?${qs}` : "/offerte";
 }

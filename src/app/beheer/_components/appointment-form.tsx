@@ -101,7 +101,7 @@ export function AppointmentForm({
           name="title"
           value={title}
           onChange={(ev) => setTitle(ev.target.value)}
-          placeholder={kind === "blokkade" ? "Bijv. Vakantie" : "Bijv. Golf 8 · Window tinting"}
+          placeholder={kind === "blokkade" ? "Bijv. Vakantie" : "Bijv. Golf 8 · Chrome delete"}
           className="field mt-2"
           {...inv("title")}
         />
