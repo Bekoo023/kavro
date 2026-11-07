@@ -52,8 +52,8 @@ export const media: {
   hero: HeroVideo;
   transformation: PhotoSequence | null;
   services: Record<ServiceSlug, PhotoAsset | null>;
-  /** Sfeerbeelden: slotsectie (garage), werkwijze (werkplaats) en 'Waarom Kavro' (detail). */
-  atmosphere: { garage: PhotoAsset; workshop: PhotoAsset; edgeDetail: PhotoAsset };
+  /** Sfeerbeelden: slotsectie (garage) en 'Waarom Kavro' (detail). */
+  atmosphere: { garage: PhotoAsset; edgeDetail: PhotoAsset };
 } = {
   hero: {
     src: "/media/hero/hero.mp4",
@@ -97,12 +97,7 @@ export const media: {
       width: 2400,
       height: 1018,
     },
-    workshop: {
-      src: "/media/sfeer/werkplaats.jpg",
-      alt: "Werkplaats met een grijze coupé, rollen folie aan de muur en rakels, hittepistool en tape op de werkbank",
-      width: 1400,
-      height: 1738,
-    },
+
     edgeDetail: {
       src: "/media/sfeer/folierand-detail.jpg",
       alt: "Macrofoto van transparante folie die strak langs de rand van een koplamp is ingelegd",

@@ -143,23 +143,15 @@ export default async function HomePage() {
             title="Hoe het werkt"
             text="Je aanvraag is zo gedaan. Daarna stemmen we alles samen met je af."
           />
-          <div className="mt-14 md:mt-20 lg:grid lg:grid-cols-12 lg:gap-10">
-            {/* Werkplaatsfoto naast de tijdlijn (alleen desktop, daar was de linkerkolom leeg). */}
-            <div className="hidden lg:col-span-4 lg:block">
-              <div className="sticky top-[calc(var(--header-h)+48px)] overflow-hidden rounded-[24px] border border-line bg-graphite">
-                <Image
-                  src={media.atmosphere.workshop.src}
-                  alt={media.atmosphere.workshop.alt}
-                  width={media.atmosphere.workshop.width}
-                  height={media.atmosphere.workshop.height}
-                  sizes="(min-width: 1440px) 420px, 30vw"
-                  className="aspect-[4/5] h-auto w-full object-cover"
-                />
-              </div>
-            </div>
-            <div className="lg:col-span-7 lg:col-start-6">
-              <ProcessSteps steps={STEPS} />
-            </div>
+          <div className="mt-14 md:mt-20">
+            <ProcessSteps steps={STEPS} />
+          </div>
+          {/* Stap 1 is de aanvraag zelf: direct de weg erheen. */}
+          <div className="mt-14 flex flex-wrap items-center gap-x-6 gap-y-3 border-t border-line pt-8 md:mt-16 md:pl-24">
+            <Link href="/offerte" className="btn-primary">
+              Vraag een offerte aan
+              <Arrow />
+            </Link>
           </div>
         </div>
       </section>
